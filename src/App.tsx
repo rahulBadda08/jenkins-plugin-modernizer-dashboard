@@ -1,30 +1,61 @@
-import { Bar } from "react-chartjs-2";
+import { Bar, Pie } from "react-chartjs-2";
 import {
   Chart as ChartJS,
   BarElement,
+  ArcElement,
   CategoryScale,
   LinearScale,
   Tooltip,
   Legend,
 } from "chart.js";
 
-ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+import "./App.css";
+
+ChartJS.register(
+  BarElement,
+  ArcElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend
+);
 
 function App() {
-  const data = {
-    labels: ["Deprecated APIs", "Modern APIs"],
+  const barData = {
+    labels: ["Deprecated APIs", "Outdated Dependencies", "Test Migration"],
     datasets: [
       {
-        label: "Plugin Status",
-        data: [120, 80], // dummy data for now
+        label: "Number of Plugins",
+        data: [120, 80, 45],
+      },
+    ],
+  };
+
+  const pieData = {
+    labels: ["Modern", "Needs Update", "Critical"],
+    datasets: [
+      {
+        label: "Plugin Health",
+        data: [60, 30, 10],
       },
     ],
   };
 
   return (
-    <div style={{ width: "600px", margin: "50px auto" }}>
-      <h2>Jenkins Plugin Modernization Dashboard</h2>
-      <Bar data={data} />
+    <div className="container">
+      <h1 className="title">Jenkins Plugin Modernization Dashboard</h1>
+
+      <div className="grid">
+        <div className="card">
+          <h3>Modernization Metrics</h3>
+          <Bar data={barData} />
+        </div>
+
+        <div className="card">
+          <h3>Plugin Health Distribution</h3>
+          <Pie data={pieData} />
+        </div>
+      </div>
     </div>
   );
 }
