@@ -1,58 +1,26 @@
-import { Bar, Pie } from "react-chartjs-2";
-import { pluginData } from "./mockData.ts"
-import {
-  Chart as ChartJS,
-  BarElement,
-  ArcElement,
-  CategoryScale,
-  LinearScale,
-  Tooltip,
-  Legend,
-} from "chart.js";
-
 import "./App.css";
-
-ChartJS.register(
-  BarElement,
-  ArcElement,
-  CategoryScale,
-  LinearScale,
-  Tooltip,
-  Legend
-);
+import BarChart from "./barChart";
+import PieChart from "./pieChart";
+import { pluginData } from "./mockData";
 
 function App() {
-  const deprecatedCount = pluginData.map(p => p.deprecatedApis);
-  const pluginNames = pluginData.map(p => p.name);
+  const labels = pluginData.map((p) => p.name);
+  const deprecatedData = pluginData.map((p) => p.deprecatedApis);
 
-  const barData = {
-    labels: pluginNames,
-    datasets: [
-      {
-        label: "Deprecated APIs per Plugin",
-        data: deprecatedCount,
-      },
-    ],
+  const statusCount: Record<string, number> = {
+    Modern: 0,
+    "Needs Update": 0,
+    Critical: 0,
   };
 
-    const statusCount = {
-      Modern: 0,
-      "Needs Update": 0,
-      Critical: 0,
-    };
-    
-    pluginData.forEach(p => {
-      statusCount[p.status]++;
-    });
-    
-    const pieData = {
-      labels: Object.keys(statusCount),
-      datasets: [
-        {
-          data: Object.values(statusCount),
-        },
-      ],
-    };
+  pluginData.forEach((p) => {
+    statusCount[p.status]++;
+  });
+
+  const pieData = Object.entries(statusCount).map(([key, value]) => ({
+    name: key,
+    value: value,
+  }));
 
   return (
     <div className="container">
@@ -60,17 +28,15 @@ function App() {
 
       <div className="grid">
         <div className="card">
-          <h3>Modernization Metrics</h3>
-          <Bar data={barData} />
+          <BarChart labels={labels} data={deprecatedData} />
         </div>
 
         <div className="card">
-          <h3>Plugin Health Distribution</h3>
-          <Pie data={pieData} />
+          <PieChart data={pieData} />
         </div>
       </div>
     </div>
   );
-};
+}
 
 export default App;
