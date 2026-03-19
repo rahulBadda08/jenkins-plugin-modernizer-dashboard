@@ -1,4 +1,5 @@
 import { Bar, Pie } from "react-chartjs-2";
+import { pluginData } from "./mockData.ts"
 import {
   Chart as ChartJS,
   BarElement,
@@ -21,25 +22,37 @@ ChartJS.register(
 );
 
 function App() {
+  const deprecatedCount = pluginData.map(p => p.deprecatedApis);
+  const pluginNames = pluginData.map(p => p.name);
+
   const barData = {
-    labels: ["Deprecated APIs", "Outdated Dependencies", "Test Migration"],
+    labels: pluginNames,
     datasets: [
       {
-        label: "Number of Plugins",
-        data: [120, 80, 45],
+        label: "Deprecated APIs per Plugin",
+        data: deprecatedCount,
       },
     ],
   };
 
-  const pieData = {
-    labels: ["Modern", "Needs Update", "Critical"],
-    datasets: [
-      {
-        label: "Plugin Health",
-        data: [60, 30, 10],
-      },
-    ],
-  };
+    const statusCount = {
+      Modern: 0,
+      "Needs Update": 0,
+      Critical: 0,
+    };
+    
+    pluginData.forEach(p => {
+      statusCount[p.status]++;
+    });
+    
+    const pieData = {
+      labels: Object.keys(statusCount),
+      datasets: [
+        {
+          data: Object.values(statusCount),
+        },
+      ],
+    };
 
   return (
     <div className="container">
@@ -58,6 +71,6 @@ function App() {
       </div>
     </div>
   );
-}
+};
 
 export default App;
