@@ -3,11 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "homepage": "https://github.com/rahulBadda08/jenkins-plugin-modernizer-dashboard",
+
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "build": "vite build",
+    "preview": "vite preview",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d dist"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
@@ -33,4 +36,5 @@
     "typescript-eslint": "^8.56.1",
     "vite": "^8.0.0"
   }
+  
 }
