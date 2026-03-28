@@ -4,19 +4,19 @@ import ReactECharts from "echarts-for-react";
 interface Props {
   labels: string[];
   data: number[];
-  title?: string;
   colors?: string[];
+  title?: string;
   rotateLabel?: number;
   yMax?: number;
-  yFormatter?: (v: number) => string;
+  yFormatter?: (value: number) => string;
 }
 
 const BarChart: React.FC<Props> = ({
   labels,
   data,
-  title = "Bar Chart",
   colors,
-  rotateLabel = 30,
+  title,
+  rotateLabel,
   yMax,
   yFormatter,
 }) => {
@@ -24,55 +24,61 @@ const BarChart: React.FC<Props> = ({
     title: {
       text: title,
       left: "center",
-      textStyle: { fontSize: 14, fontWeight: 600, color: "#2c3e50" },
+      textStyle: { fontSize: 15, fontWeight: 600, color: "#F3F4F6", fontFamily: 'Inter' },
     },
-    tooltip: {
-      trigger: "axis",
-      formatter: (params: any) => {
-        const p = params[0];
-        return `${labels[p.dataIndex]}: ${p.value}`;
-      },
-    },
+    tooltip: { trigger: 'axis' },
     grid: {
-      left: "10%",
-      right: "10%",
-      bottom: rotateLabel > 0 ? "25%" : "15%",
-      top: "15%",
+      left: "5%",
+      right: "5%",
+      bottom: "20%",
+      containLabel: true
     },
     xAxis: {
       type: "category",
       data: labels,
       axisLabel: {
-        rotate: rotateLabel,
+        rotate: rotateLabel ?? 0,
         interval: 0,
-        fontSize: 10,
-        color: "#555",
+        color: "#9CA3AF",
+        fontFamily: 'Inter',
+        fontSize: 11
       },
+      axisLine: { lineStyle: { color: "rgba(255, 255, 255, 0.1)" } }
     },
     yAxis: {
       type: "value",
       max: yMax,
       axisLabel: {
-        formatter: yFormatter ?? undefined,
-        color: "#555",
+        color: "#9CA3AF",
+        fontFamily: 'Inter',
+        formatter: yFormatter,
+      },
+      splitLine: {
+        lineStyle: { color: "rgba(255, 255, 255, 0.05)", type: 'dashed' },
       },
     },
     series: [
       {
-        data: colors
-          ? data.map((val, i) => ({
-              value: val,
-              itemStyle: { color: colors[i] ?? "#60a5fa" },
-            }))
-          : data,
+        data: data,
         type: "bar",
-        barMaxWidth: 50,
-        itemStyle: colors ? undefined : { color: "#60a5fa" },
+        itemStyle: {
+          color: (params: any) => {
+            if (colors && colors.length === data.length) return colors[params.dataIndex];
+            if (colors && colors.length > 0) return colors[0];
+            return "#3B82F6";
+          },
+          borderRadius: [4, 4, 0, 0]
+        },
       },
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: "300px" }} />;
+  return (
+    <ReactECharts
+      option={option}
+      style={{ height: 350, width: "100%" }} // 🔥 FIX SIZE
+    />
+  );
 };
 
 export default BarChart;
