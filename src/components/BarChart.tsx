@@ -61,33 +61,35 @@ const BarChart: React.FC<BarChartProperties> = ({
         top: "15%",
         containLabel: true
       },
-      dataZoom: labels.length > 10 ? [
+      dataZoom: labels.length > 15 ? [
         {
           type: 'slider',
           show: true,
           // CRITICAL: Only set initial values on a new dataset.
-          // On subsequent frames (mouse move), we omit them so ECharts keeps current scroll.
           ...(isNewData ? {
             startValue: 0,
-            endValue: labels.length > 50 ? 50 : 15,
+            endValue: 14, // 15 bars visible per scroll (0 to 14)
           } : {}),
-          zoomLock: true, // FIXED RANGE: Transforms zoom into a pure scrollbar
-          height: 24,
+          zoomLock: true, // Disables ranging/expanding entirely
+          height: 12,    // Slender scrollbar height
           bottom: 25,
-          borderColor: "rgba(255, 255, 255, 0.05)",
-          backgroundColor: "rgba(0, 0, 0, 0.1)",
-          fillerColor: "rgba(139, 92, 246, 0.3)",
-          handleIcon: "path://M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z",
-          handleSize: "110%",
-          handleStyle: {
-            color: "var(--accent-primary)",
-            shadowBlur: 10,
-            shadowColor: "rgba(0, 0, 0, 0.5)"
+          borderColor: "transparent",
+          backgroundColor: "rgba(255, 255, 255, 0.05)",
+          fillerColor: {
+            type: 'linear',
+            x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [
+              { offset: 0, color: '#6A89E6' }, 
+              { offset: 0.5, color: '#8E5FE2' }, 
+              { offset: 1, color: '#D83D92' }
+            ]
           },
-          moveOnMouseMove: true,
-          showDataShadow: false,
+          // Standard scrollbar behavior: no handles, no detail popups
+          handleSize: 0, 
           showDetail: false,
-          textStyle: { color: "#94a3b8" }
+          showDataShadow: false,
+          brushSelect: false,
+          moveOnMouseMove: true,
         },
         {
           type: 'inside',
