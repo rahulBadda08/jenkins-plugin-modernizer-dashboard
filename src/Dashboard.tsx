@@ -3,11 +3,9 @@ import BarChart from "./components/BarChart";
 import PieChart from "./components/PieChart";
 import DataExplorer from "./components/DataExplorer";
 import allPluginsRaw from "./data/all_plugins.json";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 // ── STRICT TYPESCRIPT DEFINITIONS ──
-// These definitions mirror the exact Jenkins metadata-plugin-modernizer JSON schema payload.
-// Definitively typing these ensures the dashboard never drops data or crashes silently on bad nodes.
 type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
 type PRStatus = "MERGED" | "OPEN" | "CLOSED" | "DRAFT" | string;
 
@@ -33,141 +31,122 @@ interface PluginData {
   migrations: Migration[];
 }
 
-/**
- * ─────────────────────────────────────────────────────────────────────────────
- * CORE APPLICATION ROUTER (Dashboard)
- * Serves as the master engine of the application, managing global plugin data,
- * state navigation, and orchestrating the rendering lifecycle for the data-viz elements.
- * ─────────────────────────────────────────────────────────────────────────────
- */
 function Dashboard() {
-  // We typecast the statically imported, automatically ingested JSON bundle safely into React Memory
   const allPluginsData = allPluginsRaw as unknown as PluginData[];
-  
-  // High-level navigation state router. Defaults to painting the macro global perspective.
   const [currentlyActiveTab, setCurrentlyActiveTab] = useState<string>("Global Overview");
 
-  // Ecosystem sanitization: We forcefully drop empty plugin repositories that carry zero diagnostic tests.
-  const pluginsWithValidMigrationData = allPluginsData.filter(plugin => plugin.migrations && plugin.migrations.length > 0);
+  const pluginsWithValidMigrationData = useMemo(() => 
+    allPluginsData.filter(plugin => plugin.migrations && plugin.migrations.length > 0),
+    [allPluginsData]
+  );
 
-  // ── PRECOMPUTED GLOBAL METRICS ──
-  // These mapping and reduction pipelines run specifically for the "Global Overview" Ecosystem summary calculations.
-  const allCodeAdditions = pluginsWithValidMigrationData.map(plugin => plugin.migrations[0].additions || 0);
-  const allCodeDeletions = pluginsWithValidMigrationData.map(plugin => plugin.migrations[0].deletions || 0);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const handleMouseMove = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setMousePos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
 
-  // reduce() rapidly condenses the arrays of 400+ numbers into flat mathematical totals.
-  const grandTotalAdditions = allCodeAdditions.reduce((runningTotal, currentNumber) => runningTotal + currentNumber, 0);
-  const grandTotalDeletions = allCodeDeletions.reduce((runningTotal, currentNumber) => runningTotal + currentNumber, 0);
-  const grandTotalFilesChanged = pluginsWithValidMigrationData.reduce((runningTotal, plugin) => runningTotal + (plugin.migrations[0].changedFiles || 0), 0);
+  const grandTotalAdditions = useMemo(() => 
+    pluginsWithValidMigrationData.reduce((acc, plugin) => acc + (plugin.migrations[0].additions || 0), 0)
+  , [pluginsWithValidMigrationData]);
 
-  // ── GSOC: TOPIC TAG AGGREGATION ──
-  // Mathematically reduces the entire plugin matrix to count exactly which OpenRewrite tags were used (e.g., Parent POM, JS-305)
-  const globalTagCounts: Record<string, number> = {};
-  pluginsWithValidMigrationData.forEach(plugin => {
-    const tags = plugin.migrations[0].tags || [];
-    tags.forEach(tag => {
-      globalTagCounts[tag] = (globalTagCounts[tag] || 0) + 1;
+  const grandTotalDeletions = useMemo(() => 
+    pluginsWithValidMigrationData.reduce((acc, plugin) => acc + (plugin.migrations[0].deletions || 0), 0)
+  , [pluginsWithValidMigrationData]);
+
+  const grandTotalFilesChanged = useMemo(() => 
+    pluginsWithValidMigrationData.reduce((acc, plugin) => acc + (plugin.migrations[0].changedFiles || 0), 0)
+  , [pluginsWithValidMigrationData]);
+
+  const { topPieData, overviewLabels, overviewData } = useMemo(() => {
+    const globalTagCounts: Record<string, number> = {};
+    pluginsWithValidMigrationData.forEach(plugin => {
+      (plugin.migrations[0].tags || []).forEach(tag => {
+        globalTagCounts[tag] = (globalTagCounts[tag] || 0) + 1;
+      });
     });
-  });
 
-  // Convert raw counts into ECharts Pie formatting and take top 6 for clean visual distribution
-  const rawPieData = Object.keys(globalTagCounts)
-    .map(tag => ({ name: tag, value: globalTagCounts[tag] }))
-    .sort((a,b) => b.value - a.value);
-  const topPieData = rawPieData.slice(0, 6);
-  const otherPieCount = rawPieData.slice(6).reduce((acc, curr) => acc + curr.value, 0);
-  if (otherPieCount > 0) topPieData.push({ name: "Other Topics", value: otherPieCount });
+    const rawPieData = Object.keys(globalTagCounts)
+      .map(tag => ({ name: tag, value: globalTagCounts[tag] }))
+      .sort((a,b) => b.value - a.value);
+    
+    const top6 = rawPieData.slice(0, 6);
+    const otherPieCount = rawPieData.slice(6).reduce((acc, curr) => acc + curr.value, 0);
+    if (otherPieCount > 0) top6.push({ name: "Other Topics", value: otherPieCount });
 
-  // Dynamic Lookup Pointer for when the user clicks explicitly onto an isolated Plugin Tab.
-  const currentlySelectedPlugin = allPluginsData.find((plugin) => plugin.pluginName === currentlyActiveTab);
+    const scaled = [...pluginsWithValidMigrationData]
+      .map(plugin => ({
+        name: plugin.pluginName,
+        totalMods: (plugin.migrations[0].additions || 0) + (plugin.migrations[0].deletions || 0)
+      }))
+      .sort((a, b) => b.totalMods - a.totalMods);
 
-  return (
-    <div className="container">
-      <div className="header">
-        <h1 className="title">Plugin Modernizer Stats Visualization</h1>
-        <p style={{ color: "var(--text-secondary)", marginTop: "-10px", fontSize: "16px" }}>Jenkins Ecosystem Dashboard</p>
-      </div>
+    return { 
+      topPieData: top6, 
+      overviewLabels: scaled.map(p => p.name), 
+      overviewData: scaled.map(p => p.totalMods) 
+    };
+  }, [pluginsWithValidMigrationData]);
 
-      {/* ── TOP NAVIGATION NAVBAR ── */}
-      <div className="tabs-container" style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-        <button
-          onClick={() => setCurrentlyActiveTab("Global Overview")}
-          className={`tab-btn ${currentlyActiveTab === "Global Overview" ? "active" : ""}`}
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => setCurrentlyActiveTab("Topic Dashboards")}
-          className={`tab-btn ${currentlyActiveTab === "Topic Dashboards" ? "active" : ""}`}
-        >
-          Modernization Topics
-        </button>
-        <button
-          onClick={() => setCurrentlyActiveTab("Data Explorer")}
-          className={`tab-btn ${currentlyActiveTab === "Data Explorer" ? "active" : ""}`}
-        >
-          Data Explorer
-        </button>
-        <button
-          onClick={() => setCurrentlyActiveTab("Methodology")}
-          className={`tab-btn ${currentlyActiveTab === "Methodology" ? "active" : ""}`}
-        >
-          Methodology
-        </button>
-      </div>
+  const currentlySelectedPlugin = useMemo(() => 
+    allPluginsData.find((plugin) => plugin.pluginName === currentlyActiveTab),
+    [allPluginsData, currentlyActiveTab]
+  );
 
-      {currentlyActiveTab === "Global Overview" ? (
-        <div className="tab-content animate-fade-up" key="global">
-          <h2 className="title" style={{ textAlign: "center", marginBottom: "30px" }}>
-            Ecosystem Impact (<span className="plugin-name">{pluginsWithValidMigrationData.length} Plugins Processed</span>)
-          </h2>
+  const detailMetrics = useMemo(() => {
+    if (!currentlySelectedPlugin || !currentlySelectedPlugin.migrations.length) return null;
+    const migration = currentlySelectedPlugin.migrations[0];
+    return {
+      healthLabels: Object.keys(migration.checkRuns || {}),
+      healthData: Object.keys(migration.checkRuns || {}).map(k => migration.checkRuns[k] === "success" ? 1 : 0.3),
+      healthColors: Object.keys(migration.checkRuns || {}).map(k => migration.checkRuns[k] === "success" ? "#10B981" : "#EF4444"),
+      changeStats: [migration.additions, migration.deletions, migration.changedFiles],
+      summaryPie: migration.migrationStatus === 'SUCCESS' ? [{ name: "Success", value: 1 }, { name: "Null", value: 0 }] : [{ name: "Success", value: 0 }, { name: "Null", value: 1 }],
+      statusPie: [{ name: "Migration", value: 1 }, { name: "PR", value: 1 }]
+    };
+  }, [currentlySelectedPlugin]);
 
-          <div className="glass-card summary-card delay-1">
-            <div className="summary-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", textAlign: "center" }}>
+  // ── ROUTING ENGINE ──
+  const renderMainContent = () => {
+    if (currentlyActiveTab === "Global Overview") {
+      return (
+        <div className="tab-content" key="global">
+          <div className="glass-card summary-card reveal-node" style={{ marginBottom: "40px" }}>
+            <div className="summary-grid">
               <div className="summary-item">
                 <span className="summary-label">Total Code Additions</span>
-                <span className="summary-value" style={{ color: "#10B981", fontSize: "32px", fontWeight: 800 }}>+{grandTotalAdditions}</span>
+                <span className="summary-value" style={{ color: "var(--accent-green)" }}>+{grandTotalAdditions.toLocaleString()}</span>
               </div>
               <div className="summary-item">
                 <span className="summary-label">Total Code Deletions</span>
-                <span className="summary-value" style={{ color: "#EF4444", fontSize: "32px", fontWeight: 800 }}>-{grandTotalDeletions}</span>
+                <span className="summary-value" style={{ color: "var(--accent-red)" }}>-{grandTotalDeletions.toLocaleString()}</span>
               </div>
               <div className="summary-item">
-                <span className="summary-label">Total Files Affected</span>
-                <span className="summary-value" style={{ color: "#3B82F6", fontSize: "32px", fontWeight: 800 }}>{grandTotalFilesChanged}</span>
+                <span className="summary-label">Files Sanitized</span>
+                <span className="summary-value" style={{ color: "var(--accent-secondary)" }}>{grandTotalFilesChanged.toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          {/* ── MACRO BAR CHART ECHARTS INJECTION ── */}
-          <div className="charts-grid delay-2">
+          <div className="charts-grid reveal-node animate-delay-2">
             <div className="glass-card chart-card chart-full">
-              {(() => {
-                // Return all valid plugins exactly as imported, but explicitly sort them numerically descending.
-                // This sorting transforms noisy horizontal scatter-plots into a beautiful, scannable "Pareto Curve" visual.
-                const allPluginsScaled = [...pluginsWithValidMigrationData]
-                  .map(plugin => ({
-                    name: plugin.pluginName,
-                    totalMods: (plugin.migrations[0].additions || 0) + (plugin.migrations[0].deletions || 0)
-                  }))
-                  .sort((a, b) => b.totalMods - a.totalMods);
-
-                return (
-                  <BarChart
-                    labels={allPluginsScaled.map(p => p.name)}
-                    data={allPluginsScaled.map(p => p.totalMods)}
-                    colors={allPluginsScaled.map(() => "#8b5cf6")}
-                    title="Overall Code Modifications per Plugin"
-                    rotateLabel={30}
-                  />
-                );
-              })()}
+              <BarChart
+                labels={overviewLabels}
+                data={overviewData}
+                colors={undefined}
+                title="Overall Code Modifications per Plugin"
+                rotateLabel={30}
+              />
             </div>
           </div>
         </div>
-      ) : currentlyActiveTab === "Topic Dashboards" ? (
-        <div className="tab-content animate-fade-up" key="topics">
-          <div className="glass-card chart-card chart-full" style={{ outline: '1px solid rgba(167, 139, 250, 0.4)' }}>
+      );
+    }
+
+    if (currentlyActiveTab === "Topic Dashboards") {
+      return (
+        <div className="tab-content" key="topics">
+          <div className="glass-card chart-card chart-full reveal-node">
             <div style={{ textAlign: 'center', marginBottom: '10px' }}>
               <h3 style={{ color: '#F3F4F6', fontSize: '18px', margin: 0 }}>Ecosystem Modernization Topic Vectors</h3>
               <p style={{ color: '#9CA3AF', fontSize: '14px', marginTop: '5px' }}>Distribution of OpenRewrite tags mapping the specific focus of plugin modernizations (e.g. Parent POM, BOM, JSR-305).</p>
@@ -179,10 +158,14 @@ function Dashboard() {
             )}
           </div>
         </div>
-      ) : currentlyActiveTab === "Methodology" ? (
-        <div className="tab-content animate-fade-up" key="methodology">
-           <div className="glass-card" style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'left', lineHeight: '1.6' }}>
-             <h2 style={{ color: '#A78BFA', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '10px' }}>Methodology & Data Dictionary</h2>
+      );
+    }
+
+    if (currentlyActiveTab === "Methodology") {
+      return (
+        <div className="tab-content" key="methodology">
+           <div className="glass-card reveal-node" style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'left', lineHeight: '1.6' }}>
+             <h2 className="title" style={{ fontSize: '32px', marginBottom: '20px' }}>Methodology & Rules</h2>
              
              <h3 style={{ color: '#F3F4F6' }}>Source of Truth</h3>
              <p style={{ color: '#9CA3AF' }}>All telemetry displayed on this static dashboard is securely ingested at build-time directly from the official <code style={{ background: 'rgba(0,0,0,0.3)', padding: '2px 5px', borderRadius: '4px' }}>jenkins-infra/metadata-plugin-modernizer</code> repository via automated GitHub Actions.</p>
@@ -198,177 +181,198 @@ function Dashboard() {
              </ul>
            </div>
         </div>
-      ) : currentlyActiveTab === "Data Explorer" ? (
+      );
+    }
+
+    if (currentlyActiveTab === "Data Explorer") {
+      return (
         <div className="tab-content animate-fade-up" key="explorer">
           <DataExplorer plugins={allPluginsData} onPluginSelect={setCurrentlyActiveTab} />
         </div>
-      ) : currentlySelectedPlugin && currentlySelectedPlugin.migrations.length > 0 ? (
+      );
+    }
+
+    // Detail View: Target Plugin Analytics
+    if (currentlySelectedPlugin && currentlySelectedPlugin.migrations.length > 0) {
+      const migrationData = currentlySelectedPlugin.migrations[0];
+      return (
         <div className="tab-content" key={currentlyActiveTab}>
-          {(() => {
-            const migrationData = currentlySelectedPlugin.migrations[0];
+          <div className="reveal-node" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "40px" }}>
+            <button 
+              onClick={() => setCurrentlyActiveTab("Data Explorer")}
+              className="tab-btn"
+            >
+              ← Explorer Console
+            </button>
+            
+            <div style={{ textAlign: 'center' }}>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '12px', letterSpacing: '2px', marginBottom: '4px' }}>PLUG-IN DIAGNOSTICS</p>
+              <h2 className="title">
+                <span className="plugin-name">{currentlySelectedPlugin.pluginName}</span>
+              </h2>
+            </div>
+            
+            <a
+              href={currentlySelectedPlugin.pluginRepository}
+              target="_blank"
+              rel="noreferrer"
+              className="tab-btn active"
+            >
+              Source Code
+            </a>
+          </div>
 
-            // ── Bar Chart 1: CI Check Runs ─────────────────────────────
-            const healthTestNames = Object.keys(migrationData.checkRuns || {});
-            const healthTestResults = healthTestNames.map((testName) => (migrationData.checkRuns[testName] === "success" ? 1 : 0));
-            const healthTestColors = healthTestResults.map((result) => (result === 1 ? "#10B981" : "#EF4444"));
+          {/* ── MODULAR TELEMETRY HUD ── */}
+          <div className="summary-grid" style={{ marginBottom: '40px' }}>
+            <div className="telemetry-module reveal-node animate-delay-1">
+              <div className="telemetry-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              </div>
+              <span className="telemetry-label">Active Recipe</span>
+              <span className="telemetry-value">{migrationData.migrationName}</span>
+            </div>
 
-            // ── Bar Chart 2: Code Changes ──────────────────────────────
-            const codeChangeCategories = ["Additions", "Deletions", "Changed Files"];
-            const codeChangeStats = [migrationData.additions, migrationData.deletions, migrationData.changedFiles];
-            const codeChangeColors = ["#10B981", "#EF4444", "#3B82F6"];
+            <div className="telemetry-module reveal-node animate-delay-2">
+              <div className="telemetry-icon-box" style={{ color: migrationData.migrationStatus === 'SUCCESS' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              </div>
+              <span className="telemetry-label">Migration Status</span>
+              <span className={`badge badge-${(migrationData.migrationStatus || "unknown").toLowerCase()}`}>
+                {migrationData.migrationStatus || "unknown"}
+              </span>
+            </div>
 
-            // ── Pie Chart 1: Check Runs Summary ───────────────────────
-            const successfulTestsCount = healthTestResults.filter((result) => result === 1).length;
-            const failedTestsCount = healthTestResults.length - successfulTestsCount;
-            const healthTestSummaryChartData = [
-              { name: "Success", value: successfulTestsCount },
-              { name: "Null / Pending", value: failedTestsCount },
-            ];
+            <div className="telemetry-module reveal-node animate-delay-3">
+              <div className="telemetry-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+              </div>
+              <span className="telemetry-label">Pull Request</span>
+              <span className={`badge badge-${(migrationData.pullRequestStatus || "unknown").toLowerCase()}`}>
+                {(migrationData.pullRequestStatus || "unknown").replace("_", " ")}
+              </span>
+            </div>
 
-            // ── Pie Chart 2: Migration & PR Status ────────────────────
-            const migrationStatusChartData = [
-              { name: `Migration: ${migrationData.migrationStatus || "unknown"}`, value: 1 },
-              { name: `PR: ${migrationData.pullRequestStatus || "unknown"}`, value: 1 },
-            ];
+            <div className="telemetry-module reveal-node animate-delay-4">
+              <div className="telemetry-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+              </div>
+              <span className="telemetry-label">Entity Version</span>
+              <span className="telemetry-value">{migrationData.pluginVersion || "N/A"}</span>
+            </div>
 
-            return (
-              <>
-                {/* ── Page Header Toolbar ── */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "30px", marginTop: "10px" }}>
-                  <button 
-                    onClick={() => setCurrentlyActiveTab("Data Explorer")}
-                    style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "var(--text-secondary)", cursor: "pointer", padding: "8px 20px", borderRadius: "8px", fontWeight: "bold" }}
-                  >
-                    ← Back
-                  </button>
-                  
-                  <h2 className="title animate-fade-up" style={{ margin: 0 }}>
-                    <span className="plugin-name">{currentlySelectedPlugin.pluginName}</span>
-                  </h2>
-                  
-                  <a
-                    href={currentlySelectedPlugin.pluginRepository}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="repo-link animate-fade-up"
-                    style={{ display: "inline-block", padding: "8px 20px" }}
-                  >
-                    <span style={{ fontSize: "18px" }}>📦</span> View Repository
-                  </a>
-                </div>
+            <div className="telemetry-module reveal-node animate-delay-5" style={{ gridColumn: 'span 2' }}>
+              <div className="telemetry-icon-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+              </div>
+              <span className="telemetry-label">Modernization Topics</span>
+              <div className="tag-hud" style={{ marginTop: '4px' }}>
+                {(migrationData.tags || []).map((tag) => (
+                  <span key={tag} className="tag-node">{tag}</span>
+                ))}
+              </div>
+            </div>
+          </div>
 
-                {/* ── Summary Card ── */}
-                <div className="glass-card summary-card animate-fade-up delay-1">
-                  <div className="summary-grid">
-                    <div className="summary-item">
-                      <span className="summary-label">Recipe</span>
-                      <span className="summary-value">{migrationData.migrationName}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Migration Status</span>
-                      <span className={`badge badge-${(migrationData.migrationStatus || "unknown").toLowerCase()}`}>
-                        {migrationData.migrationStatus || "unknown"}
-                      </span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">PR Status</span>
-                      <span className={`badge badge-${(migrationData.pullRequestStatus || "unknown").toLowerCase()}`}>
-                        {(migrationData.pullRequestStatus || "unknown").replace("_", " ")}
-                      </span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Check Runs</span>
-                      <span className="badge badge-pending">{migrationData.checkRunsSummary}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Plugin Version</span>
-                      <span className="summary-value">{migrationData.pluginVersion || "N/A"}</span>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Jenkins Version</span>
-                      <span className="summary-value">{migrationData.jenkinsVersion || "N/A"}</span>
-                    </div>
-                    <div className="summary-item" style={{ gridColumn: "1 / -1" }}>
-                      <span className="summary-label">Tags</span>
-                      <div className="tags">
-                        {(migrationData.tags || []).map((tag) => (
-                          <span key={tag} className="tag">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Pull Request</span>
-                      <a href={migrationData.pullRequestUrl} target="_blank" rel="noreferrer" className="pr-link">
-                        {migrationData.pullRequestUrl}
-                      </a>
-                    </div>
-                    <div className="summary-item">
-                      <span className="summary-label">Timestamp</span>
-                      <span className="summary-value">{migrationData.timestamp}</span>
-                    </div>
-                  </div>
-                </div>
+          <div className={`system-intent reveal-node animate-delay-5 ${migrationData.migrationStatus === 'SUCCESS' ? 'success' : 'fail'}`} style={{ marginBottom: '40px' }}>
+            <h3 className="title" style={{ fontSize: '24px', marginBottom: '16px' }}>Recommended Action Steps</h3>
+            <p style={{ color: 'var(--text-primary)', opacity: 0.8, fontSize: '16px', lineHeight: '1.7' }}>
+              {migrationData.migrationStatus === 'SUCCESS' 
+                ? "The OpenRewrite transformation succeeded. Analysts should manually inspect the Pull Request diff link highlighted above. Maintainers must verify backward compatibility before approving the PR merge." 
+                : "Transformation Failed. The automated script collided with custom logic. Maintainers are recommended to manually evaluate the native 'pom.xml' for conflicting dependency bounds and test configurations."}
+            </p>
+          </div>
 
-                {/* ── GSOC: Recommended Action Steps ── */}
-                <div className="glass-card animate-fade-up delay-1" style={{ margin: '20px 0', borderLeft: migrationData.migrationStatus === 'SUCCESS' ? '4px solid #34D399' : '4px solid #FBBF24' }}>
-                  <h3 style={{ color: '#F3F4F6', marginTop: 0 }}>Recommended Action Steps</h3>
-                  <p style={{ color: '#9CA3AF', lineHeight: '1.6' }}>
-                    {migrationData.migrationStatus === 'SUCCESS' 
-                      ? " The OpenRewrite transformation succeeded. Analysts should manually inspect the Pull Request diff link above. Maintainers must verify backward compatibility before approving the PR merge." 
-                      : " Transformation Failed. The automated script collided with custom logic. Maintainers are recommended to manually evaluate the native 'pom.xml' for conflicting dependency bounds and test configurations."}
-                  </p>
-                </div>
+          <div className="charts-grid">
+            <div className="glass-card chart-card animate-fade-up delay-2">
+              <PieChart
+                data={detailMetrics?.summaryPie || []}
+                title="Check Runs Summary"
+                colors={["#10B981", "#EF4444"]}
+              />
+            </div>
 
-                {/* ── Charts Grid ── */}
-                <div className="charts-grid">
-                  <div className="glass-card chart-card animate-fade-up delay-2">
-                    <PieChart
-                      data={healthTestSummaryChartData}
-                      title="Check Runs Summary"
-                      colors={["#10B981", "#EF4444"]}
-                    />
-                  </div>
+            <div className="glass-card chart-card animate-fade-up delay-2">
+              <BarChart
+                labels={["Additions", "Deletions", "Changed Files"]}
+                data={detailMetrics?.changeStats || []}
+                colors={["#10B981", "#EF4444", "#3B82F6"]}
+                title="Code Changes"
+              />
+            </div>
 
-                  <div className="glass-card chart-card animate-fade-up delay-2">
-                    <BarChart
-                      labels={codeChangeCategories}
-                      data={codeChangeStats}
-                      colors={codeChangeColors}
-                      title="Code Changes"
-                    />
-                  </div>
+            <div className="glass-card chart-card chart-full animate-fade-up delay-3">
+              <BarChart
+                labels={detailMetrics?.healthLabels || []}
+                data={detailMetrics?.healthData || []}
+                colors={detailMetrics?.healthColors || []}
+                title="CI Check Runs (Green = Pass, Red = Null/Fail)"
+                rotateLabel={40}
+                yMax={1}
+                yFormatter={(v: number) => (v >= 1 ? "Pass" : "Fail")}
+              />
+            </div>
 
-                  <div className="glass-card chart-card chart-full animate-fade-up delay-3">
-                    <BarChart
-                      labels={healthTestNames}
-                      data={healthTestResults.map((result) => (result === 1 ? 1 : 0.3))}
-                      colors={healthTestColors}
-                      title="CI Check Runs (Green = Pass, Red = Null/Fail)"
-                      rotateLabel={40}
-                      yMax={1}
-                      yFormatter={(v: number) => (v >= 1 ? "Pass" : "Fail")}
-                    />
-                  </div>
-
-                  <div className="glass-card chart-card animate-fade-up delay-4">
-                    <PieChart
-                      data={migrationStatusChartData}
-                      title="Migration & PR Status"
-                      colors={["#10B981", "#8b5cf6"]}
-                    />
-                  </div>
-                </div>
-              </>
-            );
-          })()}
+            <div className="glass-card chart-card animate-fade-up delay-4">
+              <PieChart
+                data={detailMetrics?.statusPie || []}
+                title="Migration & PR Status"
+                colors={["#10B981", "#8b5cf6"]}
+              />
+            </div>
+          </div>
         </div>
-      ) : (
-        <div className="glass-card animate-fade-up" style={{ textAlign: "center", padding: "60px" }}>
-          <h2>No migration statistics are available for '{currentlyActiveTab}' at this time.</h2>
-        </div>
-      )}
+      );
+    }
+
+    return (
+      <div className="glass-card animate-fade-up" style={{ textAlign: "center", padding: "60px" }}>
+         <h2>No migration statistics are available for '{currentlyActiveTab}' at this time.</h2>
+      </div>
+    );
+  };
+
+  return (
+    <div 
+      className="container" 
+      onMouseMove={handleMouseMove}
+      style={{ '--mouse-x': `${mousePos.x}px`, '--mouse-y': `${mousePos.y}px` } as React.CSSProperties}
+    >
+      <div className="header reveal-node">
+        <h1 className="title">
+          Plugin <span className="plugin-name">Modernizer</span>
+          <br />Stats Visualization
+        </h1>
+        <p style={{ color: "var(--text-secondary)", fontSize: "16px", letterSpacing: "1px" }}>JENKINS ECOSYSTEM CONSOLE</p>
+      </div>
+
+      <div className="tabs-container reveal-node animate-delay-1">
+        <button
+          onClick={() => setCurrentlyActiveTab("Global Overview")}
+          className={`tab-btn ${currentlyActiveTab === "Global Overview" ? "active" : ""}`}
+        >
+          Overview
+        </button>
+        <button
+          onClick={() => setCurrentlyActiveTab("Topic Dashboards")}
+          className={`tab-btn ${currentlyActiveTab === "Topic Dashboards" ? "active" : ""}`}
+        >
+          Topic Matrix
+        </button>
+        <button
+          onClick={() => setCurrentlyActiveTab("Data Explorer")}
+          className={`tab-btn ${currentlyActiveTab === "Data Explorer" ? "active" : ""}`}
+        >
+          Explorer
+        </button>
+        <button
+          onClick={() => setCurrentlyActiveTab("Methodology")}
+          className={`tab-btn ${currentlyActiveTab === "Methodology" ? "active" : ""}`}
+        >
+          Methodology
+        </button>
+      </div>
+
+      {renderMainContent()}
     </div>
   );
 }

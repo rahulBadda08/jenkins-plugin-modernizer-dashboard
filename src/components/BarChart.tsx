@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo, useRef } from "react";
 import ReactECharts from "echarts-for-react";
 
 /**
@@ -27,101 +27,145 @@ const BarChart: React.FC<BarChartProperties> = ({
   yMax,
   yFormatter,
 }) => {
-  const chartConfiguration = {
-    title: {
-      text: title,
-      left: "center",
-      textStyle: { fontSize: 15, fontWeight: 600, color: "#F3F4F6", fontFamily: 'Inter' },
-    },
-    animationEasing: 'cubicOut',
-    animationDuration: 1500,
-    animationDelay: (idx: number) => Math.min(idx * 25, 1000), // Cap first-load cascade so it doesn't run forever
-    animationDurationUpdate: 200,   // Updates while scrolling are now ultra-fast!
-    animationDelayUpdate: 0,        // Zero delay while scrolling left/right
-    tooltip: { trigger: 'axis' },
-    grid: {
-      left: "5%",
-      right: "5%",
-      bottom: "25%",
-      containLabel: true
-    },
-    dataZoom: labels.length > 20 ? [
-      {
-        type: 'slider',
-        show: true,
-        startValue: 0,
-        endValue: 24,
-        zoomLock: true,
-        showDataShadow: false,
-        showDetail: false,
-        brushSelect: false,
-        height: 8, // Soft thin profile to create optical rounding
-        bottom: 8,
-        borderColor: "rgba(167, 139, 250, 0.3)", // Faint glowing aura around the track
-        backgroundColor: "rgba(0, 0, 0, 0.4)", // Deep track
-        fillerColor: "rgba(167, 139, 250, 0.9)", // Solid glowing neon tube core
-        handleIcon: "none", // completely smooth, no sharp handles
+  // ── ECOSYSTEM PERSISTENCE ENGINE ──
+  // We track the labels reference to detect when the user has filtered/searched.
+  // We ONLY provide startValue on the first render for a given dataset.
+  const prevLabelsRef = useRef<string[]>([]);
+  
+  const chartConfiguration = useMemo(() => {
+    const isNewData = prevLabelsRef.current !== labels;
+    prevLabelsRef.current = labels;
+
+    return {
+      title: {
+        text: title,
+        left: "center",
+        textStyle: { fontSize: 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit' },
       },
-      {
-        type: 'inside',
-        zoomOnMouseWheel: false,
-        moveOnMouseWheel: true
-      }
-    ] : undefined,
-    xAxis: {
-      type: "category",
-      data: labels,
-      axisLabel: {
-        rotate: rotateLabel ?? 30,
-        interval: 0,
-        color: "#9CA3AF",
-        fontFamily: 'Inter',
-        fontSize: 11,
-        formatter: (value: string) => value.length > 16 ? value.substring(0, 16) + '...' : value
+      animationEasing: 'elasticOut',
+      animationDuration: 2000,
+      animationDelay: (idx: number) => idx * 10,
+      tooltip: { 
+        trigger: 'axis',
+        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        textStyle: { color: '#fff', fontFamily: 'Inter' },
+        borderRadius: 12,
+        padding: 12,
+        backdropFilter: 'blur(12px)'
       },
-      axisLine: { lineStyle: { color: "rgba(255, 255, 255, 0.1)" } }
-    },
-    yAxis: {
-      type: "value",
-      max: yMax,
-      axisLabel: {
-        color: "#9CA3AF",
-        fontFamily: 'Inter',
-        formatter: yFormatter,
+      grid: {
+        left: "4%",
+        right: "4%",
+        bottom: "28%",
+        top: "15%",
+        containLabel: true
       },
-      splitLine: {
-        lineStyle: { color: "rgba(255, 255, 255, 0.05)", type: 'dashed' },
-      },
-    },
-    series: [
-      {
-        data: data,
-        type: "bar",
-        itemStyle: {
-          color: (barData: any) => {
-            if (colors && colors.length === data.length) return colors[barData.dataIndex];
-            if (colors && colors.length > 0) return colors[0];
-            return "#3B82F6";
-          },
-          borderRadius: [4, 4, 0, 0]
-        },
-        emphasis: {
-          itemStyle: {
-            color: "#A78BFA",
+      dataZoom: labels.length > 10 ? [
+        {
+          type: 'slider',
+          show: true,
+          // CRITICAL: Only set initial values on a new dataset.
+          // On subsequent frames (mouse move), we omit them so ECharts keeps current scroll.
+          ...(isNewData ? {
+            startValue: 0,
+            endValue: labels.length > 50 ? 50 : 15,
+          } : {}),
+          zoomLock: true, // FIXED RANGE: Transforms zoom into a pure scrollbar
+          height: 24,
+          bottom: 25,
+          borderColor: "rgba(255, 255, 255, 0.05)",
+          backgroundColor: "rgba(0, 0, 0, 0.1)",
+          fillerColor: "rgba(139, 92, 246, 0.3)",
+          handleIcon: "path://M10.7,11.9v-1.3H9.3v1.3c-4.9,0.3-8.8,4.4-8.8,9.4c0,5,3.9,9.1,8.8,9.4v1.3h1.3v-1.3c4.9-0.3,8.8-4.4,8.8-9.4C19.5,16.3,15.6,12.2,10.7,11.9z M13.3,24.4H6.7V23h6.6V24.4z M13.3,19.6H6.7v-1.4h6.6V19.6z",
+          handleSize: "110%",
+          handleStyle: {
+            color: "var(--accent-primary)",
             shadowBlur: 10,
-            shadowColor: "rgba(167, 139, 250, 0.5)"
-          }
+            shadowColor: "rgba(0, 0, 0, 0.5)"
+          },
+          moveOnMouseMove: true,
+          showDataShadow: false,
+          showDetail: false,
+          textStyle: { color: "#94a3b8" }
+        },
+        {
+          type: 'inside',
+          zoomOnMouseWheel: false,
+          moveOnMouseWheel: true
         }
+      ] : undefined,
+      xAxis: {
+        type: "category",
+        data: labels,
+        axisLabel: {
+          rotate: rotateLabel ?? 30,
+          interval: 0,
+          color: "#94a3b8",
+          fontFamily: 'Inter',
+          fontSize: 10,
+          formatter: (value: string) => value.length > 14 ? value.substring(0, 14) + '...' : value
+        },
+        axisLine: { lineStyle: { color: "rgba(255, 255, 255, 0.08)" } },
+        axisTick: { show: false }
       },
-    ],
-  };
+      yAxis: {
+        type: "value",
+        max: yMax,
+        axisLabel: {
+          color: "#94a3b8",
+          fontFamily: 'Inter',
+          fontSize: 10,
+          formatter: yFormatter,
+        },
+        splitLine: {
+          lineStyle: { color: "rgba(255, 255, 255, 0.03)", type: 'solid' },
+        },
+        axisLine: { show: false }
+      },
+      series: [
+        {
+          data: data,
+          type: "bar",
+          barWidth: '60%',
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(139, 92, 246, 0.8)' },
+                { offset: 1, color: 'rgba(139, 92, 246, 0.2)' }
+              ]
+            },
+            borderRadius: [10, 10, 10, 10]
+          },
+          emphasis: {
+            itemStyle: {
+              color: {
+                type: 'linear',
+                x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [
+                  { offset: 0, color: 'rgba(6, 182, 212, 1)' },
+                  { offset: 1, color: 'rgba(6, 182, 212, 0.4)' }
+                ]
+              },
+              shadowBlur: 20,
+              shadowColor: "rgba(6, 182, 212, 0.5)"
+            }
+          }
+        },
+      ],
+    };
+  }, [labels, data, colors, title, rotateLabel, yMax, yFormatter]);
 
   return (
     <ReactECharts
       option={chartConfiguration}
       style={{ height: 350, width: "100%" }}
+      notMerge={false}
+      lazyUpdate={true}
     />
   );
 };
 
-export default BarChart;
+export default React.memo(BarChart);

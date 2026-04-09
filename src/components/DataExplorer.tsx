@@ -33,8 +33,6 @@ interface DataExplorerProps {
  */
 export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerProps) {
   // ── 1. STATE MANAGEMENT ──
-  // These internal state variables securely track user inputs securely. 
-  // Any update to these triggers instantaneous local re-renders of the table grid.
   const [searchQuery, setSearchQuery] = useState("");
   const [migrationFilter, setMigrationFilter] = useState("ALL");
   const [prFilter, setPrFilter] = useState("ALL");
@@ -44,24 +42,18 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
   const itemsPerPage = 15;
 
   // ── 2. DATA CASCADING & FILTERING ──
-  // useMemo caches the massive filtering computations. It guarantees that the 
-  // complex text-matching and status-matching engines only recalculate when strictly necessary.
   const filteredPlugins = useMemo(() => {
     return plugins.filter((plugin) => {
-      // Data Integrity: Exclude any artifacts that lack hard metrics
       const hasMigrations = plugin.migrations && plugin.migrations.length > 0;
       if (!hasMigrations) return false;
 
-      // Filtering criteria 1: Fuzzy Text Search
       const matchesSearch = plugin.pluginName.toLowerCase().includes(searchQuery.toLowerCase());
       
-      // Filtering criteria 2: Migration Status Drops
       let latestStatus = plugin.migrations[0].migrationStatus || "UNKNOWN";
       if (latestStatus.toUpperCase() === "FAILURE") latestStatus = "FAIL";
       
       const matchesMigration = migrationFilter === "ALL" || latestStatus.toUpperCase() === migrationFilter.toUpperCase();
 
-      // Filtering criteria 3: Pull Request Status Drops
       const prStat = plugin.migrations[0].pullRequestStatus || "UNKNOWN";
       const matchesPR = prFilter === "ALL" || prStat.toUpperCase() === prFilter.toUpperCase();
 
@@ -70,7 +62,6 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
   }, [plugins, searchQuery, migrationFilter, prFilter]);
 
   // ── 3. PAGINATION ENGINE ──
-  // To avoid unrecoverable browser DOM lagging, we strictly slice the arrays into 15-item rendering limits.
   const totalPages = Math.ceil(filteredPlugins.length / itemsPerPage);
   const paginatedData = filteredPlugins.slice(
     (currentPage - 1) * itemsPerPage,
@@ -78,10 +69,8 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
   );
 
   // ── 4. CSV EXPORT UTILITY ──
-  // Instantly serializes the actively filtered dataset into a local spreadsheet file for Jenkins core maintainers.
   const formatTimestamp = (ts: string) => {
     if (!ts || ts === "") return "Unknown Date";
-    // Jenkins outputs arbitrary hyphens (e.g. 2026-01-16T14-55-50) which breaks JS parsing.
     const [datePart, timePart] = ts.split('T');
     const validTs = timePart ? `${datePart}T${timePart.replace(/-/g, ':')}` : ts;
     const d = new Date(validTs);
@@ -91,8 +80,6 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
   const exportToCSV = () => {
     const headers = ["Plugin Name", "Migration Status", "PR Status", "Latest Run"];
     const csvRows = [headers.join(",")];
-
-    // Build rows respecting active search boundaries
     filteredPlugins.forEach(plugin => {
       const migration = plugin.migrations[0];
       const row = [
@@ -103,8 +90,6 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
       ];
       csvRows.push(row.join(","));
     });
-
-    // Native browser Blob download execution
     const blob = new Blob([csvRows.join("\n")], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const exportNode = document.createElement('a');
@@ -115,270 +100,233 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
   };
 
   return (
-    <div className="glass-card animate-fade-up">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: "20px" }}>
-        <h2 className="title" style={{ margin: 0 }}>Plugin Data Explorer</h2>
+    <div className="glass-card reveal-node">
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: "40px" }}>
+        <div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>TELEMETRY ACCESS</p>
+          <h2 className="title" style={{ fontSize: '32px', margin: 0 }}>Data Explorer</h2>
+        </div>
         
         <button 
           onClick={exportToCSV}
-          style={{ background: "#A78BFA", color: "#111827", border: "none", padding: "8px 16px", borderRadius: "8px", fontWeight: "bold", cursor: "pointer", display: "flex", gap: "8px", alignItems: "center" }}
+          className="tab-btn active"
+          style={{ padding: '8px 24px' }}
         >
-          Export to CSV
+          Download CSV
         </button>
       </div>
       
-      {/* 4. THE FILTER CONTROLS */}
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '30px', alignItems: 'center' }}>
+      {/* 4. THE CONSOLE CONTROLS */}
+      <div style={{ display: 'flex', gap: '20px', marginBottom: '40px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
         
         {/* Search Input */}
-        <div style={{ position: 'relative', flex: 1 }}>
-          <input 
-            type="text" 
-            placeholder="Search for a plugin" 
-            value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setCurrentPage(1); // Reset to page 1 if they start searching
-            }}
-            style={{ 
-              width: '100%', 
-              padding: '12px 12px 12px 40px', 
-              borderRadius: '12px', 
-              border: '1px solid rgba(255,255,255,0.1)', 
-              background: 'rgba(0,0,0,0.2)', 
-              color: 'white',
-              fontSize: '14px',
-              transition: 'all 0.2s',
-              outline: 'none'
-            }}
-            onFocus={(e) => e.target.style.borderColor = 'rgba(167, 139, 250, 0.5)'}
-            onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-          />
+        <div style={{ flex: 1, minWidth: '300px' }}>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>SEARCH REGISTRY</p>
+          <div style={{ position: 'relative' }}>
+            <input 
+              type="text" 
+              placeholder="Filter by plugin name..." 
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              style={{ 
+                width: '100%', 
+                padding: '16px 20px', 
+                borderRadius: '16px', 
+                border: '1px solid rgba(255,255,255,0.08)', 
+                background: 'rgba(0,0,0,0.3)', 
+                color: 'white',
+                fontSize: '15px',
+                outline: 'none',
+                transition: 'all 0.3s'
+              }}
+            />
+          </div>
         </div>
         
-        {/* Migration Status Dropdown */}
-        <div style={{ position: 'relative', minWidth: '180px' }}>
-          <button 
-            onClick={() => {
-              setIsMigrationDropdownOpen(!isMigrationDropdownOpen);
-              setIsPRDropdownOpen(false);
-            }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 16px',
-              background: 'rgba(17, 24, 39, 0.6)',
-              border: isMigrationDropdownOpen ? '1px solid rgba(167, 139, 250, 0.8)' : '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              color: '#F3F4F6',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              boxShadow: isMigrationDropdownOpen ? '0 0 15px rgba(167, 139, 250, 0.2)' : 'none'
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {/* Premium Icon Box */}
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(167, 139, 250, 0.1)', color: '#A78BFA', border: '1px solid rgba(167, 139, 250, 0.2)' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-              </span>
-              {/* Stacked Label & Dynamic Value */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', color: '#6B7280', fontWeight: 'bold' }}>Migration</span>
-                {migrationFilter === 'ALL' ? (
-                  <span style={{ color: '#F3F4F6', fontSize: '14px', fontWeight: 'bold' }}>All</span>
-                ) : migrationFilter === 'SUCCESS' ? (
-                  <span style={{ color: '#34D399', fontSize: '14px', fontWeight: 'bold' }}>Success</span>
-                ) : migrationFilter === 'FAIL' ? (
-                  <span style={{ color: '#F87171', fontSize: '14px', fontWeight: 'bold' }}>Fail</span>
-                ) : (
-                  <span style={{ color: '#9CA3AF', fontSize: '14px', fontWeight: 'bold' }}>Unknown</span>
-                )}
-              </div>
-            </span>
-            <svg 
-              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              style={{ transform: isMigrationDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          {isMigrationDropdownOpen && (
-            <div 
-              style={{
-                position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
-                background: 'rgba(17, 24, 39, 0.95)', backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
-                padding: '8px', zIndex: 50, boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                display: 'flex', flexDirection: 'column', gap: '4px',
-                animation: 'fadeUp 0.2s ease-out forwards'
+        {/* Custom Dropdown Filters */}
+        <div style={{ display: 'flex', gap: '12px' }}>
+          {/* Migration Dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={() => { setIsMigrationDropdownOpen(!isMigrationDropdownOpen); setIsPRDropdownOpen(false); }}
+              className={`tab-btn ${migrationFilter !== 'ALL' ? 'active' : ''}`}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                e.currentTarget.style.boxShadow = '0 0 20px rgba(139, 92, 246, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              style={{ 
+                minWidth: '220px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '8px 16px',
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                transition: 'all 0.3s ease'
               }}
             >
-              {[
-                { value: 'ALL', label: 'All Migrations', color: '#F3F4F6' },
-                { value: 'SUCCESS', label: 'SUCCESS', color: '#34D399' },
-                { value: 'FAIL', label: 'FAIL', color: '#F87171' },
-                { value: 'UNKNOWN', label: 'UNKNOWN', color: '#9CA3AF' }
-              ].map((option) => (
-                <div
-                  key={option.value}
-                  onClick={() => { setMigrationFilter(option.value); setCurrentPage(1); setIsMigrationDropdownOpen(false); }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  style={{
-                    padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-                    color: option.color, fontSize: '14px',
-                    fontWeight: migrationFilter === option.value ? 'bold' : 'normal',
-                    background: migrationFilter === option.value ? 'rgba(255,255,255,0.05)' : 'transparent',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {option.label}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="telemetry-icon-box" style={{ width: '32px', height: '32px', marginBottom: 0 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Pull Request Status Dropdown */}
-        <div style={{ position: 'relative', minWidth: '180px' }}>
-          <button 
-            onClick={() => {
-              setIsPRDropdownOpen(!isPRDropdownOpen);
-              setIsMigrationDropdownOpen(false);
-            }}
-            style={{
-              width: '100%',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: '12px 16px',
-              background: 'rgba(17, 24, 39, 0.6)',
-              border: isPRDropdownOpen ? '1px solid rgba(59, 130, 246, 0.8)' : '1px solid rgba(255,255,255,0.1)',
-              borderRadius: '12px',
-              color: '#F3F4F6',
-              fontSize: '14px',
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-              boxShadow: isPRDropdownOpen ? '0 0 15px rgba(59, 130, 246, 0.2)' : 'none'
-            }}
-          >
-            <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              {/* Premium Icon Box */}
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '32px', height: '32px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', color: '#60A5FA', border: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                   <circle cx="18" cy="18" r="3"></circle>
-                   <circle cx="6" cy="6" r="3"></circle>
-                   <path d="M13 6h3a2 2 0 0 1 2 2v7"></path>
-                   <line x1="6" y1="9" x2="6" y2="21"></line>
-                </svg>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span className="telemetry-label" style={{ fontSize: '9px' }}>Migration</span>
+                  <span className="telemetry-value" style={{ fontSize: '13px' }}>{migrationFilter === 'ALL' ? 'All Status' : migrationFilter}</span>
+                </div>
               </span>
-              {/* Stacked Label & Dynamic Value */}
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}>
-                <span style={{ fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', color: '#6B7280', fontWeight: 'bold' }}>Pull Request</span>
-                {prFilter === 'ALL' ? (
-                  <span style={{ color: '#F3F4F6', fontSize: '14px', fontWeight: 'bold' }}>All</span>
-                ) : prFilter === 'MERGED' ? (
-                  <span style={{ color: '#A78BFA', fontSize: '14px', fontWeight: 'bold' }}>Merged</span>
-                ) : prFilter === 'OPEN' ? (
-                  <span style={{ color: '#60A5FA', fontSize: '14px', fontWeight: 'bold' }}>Open</span>
-                ) : prFilter === 'CLOSED' ? (
-                  <span style={{ color: '#F87171', fontSize: '14px', fontWeight: 'bold' }}>Closed</span>
-                ) : (
-                  <span style={{ color: '#9CA3AF', fontSize: '14px', fontWeight: 'bold' }}>Unknown</span>
-                )}
-              </div>
-            </span>
-            <svg 
-              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              style={{ transform: isPRDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s ease' }}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isMigrationDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
 
-          {isPRDropdownOpen && (
-            <div 
-              style={{
-                position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
-                background: 'rgba(17, 24, 39, 0.95)', backdropFilter: 'blur(16px)',
-                border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px',
-                padding: '8px', zIndex: 50, boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
-                display: 'flex', flexDirection: 'column', gap: '4px',
-                animation: 'fadeUp 0.2s ease-out forwards'
+            {isMigrationDropdownOpen && (
+              <div 
+                className="reveal-node"
+                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '220px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
+              >
+                {[
+                  { value: 'ALL', label: 'All Statuses', color: '#fff' },
+                  { value: 'SUCCESS', label: 'SUCCESS', color: '#34D399' },
+                  { value: 'FAIL', label: 'FAIL', color: '#F87171' },
+                  { value: 'UNKNOWN', label: 'UNKNOWN', color: '#94a3b8' }
+                ].map(opt => (
+                  <div 
+                    key={opt.value}
+                    onClick={() => { setMigrationFilter(opt.value); setIsMigrationDropdownOpen(false); setCurrentPage(1); }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                      e.currentTarget.style.boxShadow = `inset 0 0 10px ${opt.color}22`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                    style={{ padding: '12px 16px', borderRadius: '12px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: migrationFilter === opt.value ? opt.color : 'var(--text-secondary)', background: migrationFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '10px' }}
+                  >
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: opt.color }}></div>
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* PR Dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button 
+              onClick={() => { setIsPRDropdownOpen(!isPRDropdownOpen); setIsMigrationDropdownOpen(false); }}
+              className={`tab-btn ${prFilter !== 'ALL' ? 'active' : ''}`}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.4)';
+                e.currentTarget.style.boxShadow = '0 0 20px rgba(96, 165, 250, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.boxShadow = 'none';
+              }}
+              style={{ 
+                minWidth: '220px', 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                padding: '8px 16px',
+                background: 'rgba(0,0,0,0.3)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                transition: 'all 0.3s ease'
               }}
             >
-              {[
-                { value: 'ALL', label: 'All PRs', color: '#F3F4F6' },
-                { value: 'MERGED', label: 'MERGED', color: '#A78BFA' },
-                { value: 'OPEN', label: 'OPEN', color: '#60A5FA' },
-                { value: 'CLOSED', label: 'CLOSED', color: '#F87171' },
-                { value: 'UNKNOWN', label: 'UNKNOWN', color: '#9CA3AF' }
-              ].map((option) => (
-                <div
-                  key={option.value}
-                  onClick={() => { setPrFilter(option.value); setCurrentPage(1); setIsPRDropdownOpen(false); }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                  style={{
-                    padding: '10px 12px', borderRadius: '8px', cursor: 'pointer',
-                    color: option.color, fontSize: '14px',
-                    fontWeight: prFilter === option.value ? 'bold' : 'normal',
-                    background: prFilter === option.value ? 'rgba(255,255,255,0.05)' : 'transparent',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  {option.label}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="telemetry-icon-box" style={{ width: '32px', height: '32px', marginBottom: 0, color: '#60A5FA', borderColor: 'rgba(96, 165, 250, 0.2)', backgroundColor: 'rgba(96, 165, 250, 0.1)' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
                 </div>
-              ))}
-            </div>
-          )}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <span className="telemetry-label" style={{ fontSize: '9px' }}>Pull Request</span>
+                  <span className="telemetry-value" style={{ fontSize: '13px' }}>{prFilter === 'ALL' ? 'All PRs' : prFilter}</span>
+                </div>
+              </span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isPRDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+
+            {isPRDropdownOpen && (
+              <div 
+                className="reveal-node"
+                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '220px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
+              >
+                {[
+                  { value: 'ALL', label: 'All PRs', color: '#fff' },
+                  { value: 'MERGED', label: 'MERGED', color: '#A78BFA' },
+                  { value: 'OPEN', label: 'OPEN', color: '#60A5FA' },
+                  { value: 'CLOSED', label: 'CLOSED', color: '#F87171' },
+                  { value: 'UNKNOWN', label: 'UNKNOWN', color: '#94a3b8' }
+                ].map(opt => (
+                  <div 
+                    key={opt.value}
+                    onClick={() => { setPrFilter(opt.value); setIsPRDropdownOpen(false); setCurrentPage(1); }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                      e.currentTarget.style.boxShadow = `inset 0 0 10px ${opt.color}22`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.boxShadow = 'none';
+                    }}
+                    style={{ padding: '12px 16px', borderRadius: '12px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: prFilter === opt.value ? opt.color : 'var(--text-secondary)', background: prFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '10px' }}
+                  >
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: opt.color }}></div>
+                    {opt.label}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
       {/* 5. THE RESULTS TABLE */}
-      <div style={{ overflowX: 'auto' }}>
+      <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
           <thead>
-            <tr style={{ borderBottom: '2px solid rgba(167, 139, 250, 0.4)', background: 'rgba(167, 139, 250, 0.1)', color: '#A78BFA', textTransform: 'uppercase', letterSpacing: '1px', fontSize: '13px' }}>
-              <th style={{ padding: '16px 12px', borderTopLeftRadius: '8px' }}>Plugin Name</th>
-              <th style={{ padding: '16px 12px' }}>Migration Status</th>
-              <th style={{ padding: '16px 12px' }}>PR Status</th>
-              <th style={{ padding: '16px 12px', borderTopRightRadius: '8px' }}>Latest Run</th>
+            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Plugin Entity</th>
+              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Migration</th>
+              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Pull Request</th>
+              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Last Analysis</th>
             </tr>
           </thead>
           <tbody>
             {paginatedData.map((plugin) => {
               const migration = plugin.migrations[0];
               return (
-                <tr key={plugin.pluginName} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                  <td style={{ padding: '12px', fontWeight: 'bold' }}>
+                <tr 
+                  key={plugin.pluginName} 
+                  style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                >
+                  <td style={{ padding: '16px 20px' }}>
                     <span 
                       onClick={() => onPluginSelect(plugin.pluginName)}
-                      style={{ cursor: 'pointer' }}
-                      title={`View interactive ECharts dashboard for ${plugin.pluginName}`}
+                      style={{ cursor: 'pointer', color: 'white', fontWeight: 600, fontSize: '15px' }}
                     >
                       {plugin.pluginName}
                     </span>
                   </td>
-                  <td style={{ padding: '12px' }}>
+                  <td style={{ padding: '16px 20px' }}>
                     <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
                        {migration.migrationStatus || "UNKNOWN"}
                     </span>
                   </td>
-                  <td style={{ padding: '12px' }}>
+                  <td style={{ padding: '16px 20px' }}>
                     <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
                        {(migration.pullRequestStatus || 'unknown').replace("_", " ")}
                     </span>
                   </td>
-                  <td style={{ padding: '12px', fontSize: '14px', color: 'var(--text-secondary)' }}>
+                  <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
                     {formatTimestamp(migration.timestamp)}
                   </td>
                 </tr>
@@ -389,23 +337,25 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
       </div>
 
       {/* 6. PAGINATION CONTROLS */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px' }}>
-        <span style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>
-          Showing {filteredPlugins.length} total results
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+          TRACE COMPLETED: {filteredPlugins.length} ENTITIES FOUND
         </span>
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button 
             className="tab-btn"
             disabled={currentPage === 1}
             onClick={() => setCurrentPage(prev => prev - 1)}
+            style={{ opacity: currentPage === 1 ? 0.3 : 1 }}
           >
             Previous
           </button>
-          <span style={{ padding: '10px' }}>Page {currentPage} of {totalPages || 1}</span>
+          <span style={{ fontSize: '13px', color: 'white', fontWeight: 'bold' }}>{currentPage} / {totalPages || 1}</span>
           <button 
             className="tab-btn"
             disabled={currentPage >= totalPages}
             onClick={() => setCurrentPage(prev => prev + 1)}
+            style={{ opacity: currentPage >= totalPages ? 0.3 : 1 }}
           >
             Next
           </button>

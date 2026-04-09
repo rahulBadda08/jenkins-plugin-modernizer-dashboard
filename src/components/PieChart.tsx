@@ -1,14 +1,5 @@
-import React from "react";
+import React, { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
-
-/**
- * ─────────────────────────────────────────────────────────────────────────────
- * ECHARTS PIE CHART ENGINE
- * Specifically designed to fulfill the GSoC "Dashboards: filters by modernization 
- * topic" requirement by mathematically aggregating OpenRewrite tag dimensions.
- * Features central interactive display and glassmorphic styling.
- * ─────────────────────────────────────────────────────────────────────────────
- */
 
 interface PieChartProperties {
   data: { name: string; value: number }[];
@@ -19,50 +10,56 @@ interface PieChartProperties {
 const PieChart: React.FC<PieChartProperties> = ({
   data,
   title,
-  colors = ["#A78BFA", "#F472B6", "#60A5FA", "#34D399", "#FBBF24", "#00E5FF"]
+  colors = ["#8b5cf6", "#06b6d4", "#10b981", "#ef4444", "#f59e0b", "#6366f1"]
 }) => {
-  const chartConfiguration = {
+  const chartConfiguration = useMemo(() => ({
     backgroundColor: "transparent",
     title: {
       text: title,
       left: "center",
-      textStyle: { fontSize: 16, fontWeight: 600, color: "#F3F4F6", fontFamily: 'Inter' },
+      textStyle: { fontSize: 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit' },
     },
     tooltip: { 
       trigger: 'item', 
-      backgroundColor: "rgba(17, 24, 39, 0.9)", 
+      backgroundColor: "rgba(15, 23, 42, 0.95)", 
       borderColor: "rgba(255,255,255,0.1)", 
-      textStyle: { color: "#FFF", fontFamily: 'Inter' } 
+      textStyle: { color: "#FFF", fontFamily: 'Inter', fontSize: 13 },
+      borderRadius: 12,
+      padding: 12,
+      backdropFilter: 'blur(12px)'
     },
     legend: {
-      orient: 'vertical',
-      left: 'left',
-      top: 'middle',
-      textStyle: { color: '#9CA3AF', fontFamily: 'Inter', fontSize: 13 }
+      orient: 'horizontal',
+      bottom: '0%',
+      left: 'center',
+      textStyle: { color: '#94a3b8', fontFamily: 'Inter', fontSize: 11 },
+      icon: 'circle'
     },
     series: [
       {
         name: 'Plugins Affected',
         type: 'pie',
-        radius: ['55%', '85%'], // Hollow 'Donut' look is vastly more modern than flat pies
-        avoidLabelOverlap: false,
+        radius: ['45%', '72%'],
+        center: ['50%', '48%'],
+        avoidLabelOverlap: true,
         itemStyle: {
-          borderRadius: 8,
-          borderColor: 'rgba(17, 24, 39, 1)', // Dark dashboard background slicing
-          borderWidth: 3
+          borderRadius: 12,
+          borderColor: 'rgba(3, 7, 18, 1)', 
+          borderWidth: 4
         },
         label: { show: false, position: 'center' },
         emphasis: {
           label: {
             show: true,
-            fontSize: 24,
-            fontWeight: 'bold',
+            fontSize: 22,
+            fontWeight: 800,
             color: '#fff',
-            formatter: '{d}%' // Shows percentage dynamically in the center hole!
+            fontFamily: 'Outfit',
+            formatter: '{d}%' 
           },
           itemStyle: {
-            shadowBlur: 15,
-            shadowColor: 'rgba(167, 139, 250, 0.5)'
+            shadowBlur: 25,
+            shadowColor: 'rgba(139, 92, 246, 0.4)'
           }
         },
         labelLine: { show: false },
@@ -70,9 +67,9 @@ const PieChart: React.FC<PieChartProperties> = ({
         color: colors
       }
     ]
-  };
+  }), [data, title, colors]);
 
-  return <ReactECharts option={chartConfiguration} style={{ height: "350px", width: "100%" }} />;
+  return <ReactECharts option={chartConfiguration} style={{ height: "400px", width: "100%" }} />;
 };
 
-export default PieChart;
+export default React.memo(PieChart);

@@ -1,23 +1,23 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@100..900&display=swap');
 
 :root {
-  --bg-color: #060913;
+  --bg-color: #030712;
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
-  --accent-blue: #3b82f6;
-  --accent-blue-glow: rgba(59, 130, 246, 0.4);
-  --accent-purple: #8b5cf6;
-  --accent-purple-glow: rgba(139, 92, 246, 0.4);
+  --accent-primary: #8b5cf6;
+  --accent-secondary: #06b6d4;
   --accent-green: #10b981;
   --accent-red: #ef4444;
-  --accent-yellow: #f59e0b;
   
-  --card-bg: rgba(15, 23, 42, 0.6);
-  --card-border: rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.5);
-  --hover-shadow: 0 20px 48px -8px rgba(0, 0, 0, 0.7), 0 0 24px var(--accent-blue-glow);
+  --card-bg: rgba(15, 23, 42, 0.4);
+  --card-border: rgba(255, 255, 255, 0.05);
+  --inner-glow: inset 0 0 20px rgba(139, 92, 246, 0.05);
   
-  --sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+  --hover-shadow: 0 0 40px rgba(139, 92, 246, 0.15), 0 0 0 1px rgba(139, 92, 246, 0.3);
+  
+  --sans: 'Inter', system-ui, sans-serif;
+  --display: 'Outfit', sans-serif;
   
   color-scheme: dark;
 }
@@ -27,26 +27,81 @@ body {
   font-family: var(--sans);
   background-color: var(--bg-color);
   background-image: 
-    radial-gradient(circle at 10% 0%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
-    radial-gradient(circle at 90% 100%, rgba(139, 92, 246, 0.15) 0%, transparent 40%),
-    radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 60%);
+    radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
+    radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
   background-attachment: fixed;
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
+  opacity: 0.05;
+  pointer-events: none;
+  z-index: 1000;
+  filter: contrast(150%) brightness(100%);
 }
 
 #root {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
+  z-index: 1;
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.6);
+  background: var(--accent-primary);
   color: white;
+}
+
+/* Cinematic Transitions */
+@keyframes cinematicReveal {
+  from { opacity: 0; transform: translateY(20px) scale(0.98); filter: blur(10px); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+}
+
+.reveal-node {
+  animation: cinematicReveal 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── VIBRANT GRADIENT SCROLLBAR (PILL DESIGN) ── */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.05); 
+  border-radius: 100px;
+  margin: 2px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg, 
+    #D83D92 0%, 
+    #8E5FE2 50%, 
+    #6A89E6 100%
+  );
+  border-radius: 100px;
+  box-shadow: 0 0 10px rgba(142, 95, 226, 0.2);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 0 15px rgba(142, 95, 226, 0.4);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
