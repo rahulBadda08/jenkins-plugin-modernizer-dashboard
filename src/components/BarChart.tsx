@@ -42,9 +42,10 @@ const BarChart: React.FC<BarChartProperties> = ({
         left: "center",
         textStyle: { fontSize: 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit' },
       },
-      animationEasing: 'elasticOut',
-      animationDuration: 2000,
-      animationDelay: (idx: number) => idx * 10,
+      animationEasing: 'cubicOut',
+      animationDuration: 1200,
+      animationDurationUpdate: 800,
+      animationDelay: (idx: number) => idx * 25,
       tooltip: { 
         trigger: 'axis',
         backgroundColor: 'rgba(15, 23, 42, 0.9)',
@@ -73,7 +74,6 @@ const BarChart: React.FC<BarChartProperties> = ({
           zoomLock: true, // Disables ranging/expanding entirely
           height: 12,    // Slender scrollbar height
           bottom: 25,
-          borderColor: "transparent",
           backgroundColor: "rgba(255, 255, 255, 0.05)",
           fillerColor: {
             type: 'linear',

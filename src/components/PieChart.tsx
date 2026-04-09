@@ -14,6 +14,9 @@ const PieChart: React.FC<PieChartProperties> = ({
 }) => {
   const chartConfiguration = useMemo(() => ({
     backgroundColor: "transparent",
+    animationEasing: 'cubicOut',
+    animationDuration: 1200,
+    animationDurationUpdate: 800,
     title: {
       text: title,
       left: "center",
