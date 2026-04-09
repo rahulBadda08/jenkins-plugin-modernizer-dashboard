@@ -6,7 +6,9 @@
   "homepage": "https://github.com/rahulBadda08/jenkins-plugin-modernizer-dashboard",
 
   "scripts": {
+    "predev": "node scripts/fetchData.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/fetchData.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "predeploy": "npm run build",
