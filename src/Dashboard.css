@@ -179,16 +179,43 @@
 @media (max-width: 1024px) {
   .charts-grid { grid-template-columns: 1fr; }
   .title { font-size: 42px; }
+  .summary-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .container { padding: 40px 20px; }
-  .title { font-size: 32px; }
+  .header { text-align: center; }
+  .title { font-size: 32px; line-height: 1.1; }
+  
   .tabs-container {
-    width: 90%;
-    flex-wrap: wrap;
-    justify-content: center;
+    width: calc(100% - 32px);
+    max-width: calc(100% - 32px);
+    margin: 0 16px 30px 16px;
+    left: 0;
+    transform: none;
+    border-radius: 24px;
+    position: relative;
+    top: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+    justify-content: flex-start;
+    padding: 8px 12px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Hide for Firefox */
   }
+  
+  .tabs-container::-webkit-scrollbar { display: none; } /* Hide for Chrome/Safari */
+  
+  .tab-btn {
+    padding: 8px 18px;
+    font-size: 13px;
+    flex: 0 0 auto;
+  }
+
+  .summary-grid { grid-template-columns: 1fr; gap: 20px; }
+  .summary-value { font-size: 32px; }
+  
+  .glass-card { padding: 24px; border-radius: 24px; }
 }
 
 /* ── TELEMETRY MODULE SYSTEM ── */
@@ -235,12 +262,15 @@
   color: var(--text-secondary);
 }
 
-.telemetry-value {
-  font-family: var(--sans);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  line-height: 1.4;
+@media (max-width: 768px) {
+  .summary-grid { grid-template-columns: 1fr; gap: 16px; }
+  .telemetry-module { 
+    min-height: 120px; /* Forces uniform height even with short content */
+    padding: 18px; 
+    justify-content: flex-start;
+  }
+  .telemetry-value { font-size: 14px; }
+  .telemetry-label { font-size: 9px; }
 }
 
 /* ── SYSTEM INTENT (DIAGNOSTIC ALERT) ── */
@@ -251,6 +281,10 @@
   border-radius: 32px;
   border: 1px solid rgba(255, 255, 255, 0.05);
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .system-intent { padding: 24px; border-radius: 20px; }
 }
 
 .system-intent::before {

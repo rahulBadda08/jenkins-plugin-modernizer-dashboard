@@ -1,11 +1,11 @@
-import React, { useMemo, useRef } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import ReactECharts from "echarts-for-react";
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
- * ECHARTS CORE RENDERER (BarChart)
- * A highly reusable, glassmorphic data visualization wrapper for Apache ECharts.
- * Handles dimensional rendering, responsive styling, and automated UX scrollbars.
+ * CINEMATIC BAR CHART COMPONENT
+ * Implements high-fidelity animations, custom gradient scrollbars, and
+ * referential stability for ecosystem data persistence.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 interface BarChartProperties {
@@ -28,11 +28,19 @@ const BarChart: React.FC<BarChartProperties> = ({
   yFormatter,
 }) => {
   // ── ECOSYSTEM PERSISTENCE ENGINE ──
-  // We track the labels reference to detect when the user has filtered/searched.
-  // We ONLY provide startValue on the first render for a given dataset.
   const prevLabelsRef = useRef<string[]>([]);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  // Monitor viewport changes for responsive chart scaling
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
   
   const chartConfiguration = useMemo(() => {
+    // We track the labels reference to detect when the user has filtered/searched.
+    // We ONLY provide startValue on the first render for a given dataset.
     const isNewData = prevLabelsRef.current !== labels;
     prevLabelsRef.current = labels;
 
@@ -40,8 +48,9 @@ const BarChart: React.FC<BarChartProperties> = ({
       title: {
         text: title,
         left: "center",
-        textStyle: { fontSize: 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit' },
+        textStyle: { fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit' },
       },
+      /* ── SMOOTH ANIMATION ENGINE ── */
       animationEasing: 'cubicOut',
       animationDuration: 1200,
       animationDurationUpdate: 800,
@@ -58,7 +67,7 @@ const BarChart: React.FC<BarChartProperties> = ({
       grid: {
         left: "4%",
         right: "4%",
-        bottom: "28%",
+        bottom: isMobile ? "38%" : "28%",
         top: "15%",
         containLabel: true
       },
@@ -66,14 +75,13 @@ const BarChart: React.FC<BarChartProperties> = ({
         {
           type: 'slider',
           show: true,
-          // CRITICAL: Only set initial values on a new dataset.
           ...(isNewData ? {
             startValue: 0,
-            endValue: 14, // 15 bars visible per scroll (0 to 14)
+            endValue: 14, // 15 bars visible per scroll
           } : {}),
-          zoomLock: true, // Disables ranging/expanding entirely
-          height: 12,    // Slender scrollbar height
-          bottom: 25,
+          zoomLock: true,
+          height: 12,
+          bottom: isMobile ? 10 : 25,
           backgroundColor: "rgba(255, 255, 255, 0.05)",
           fillerColor: {
             type: 'linear',
@@ -84,7 +92,6 @@ const BarChart: React.FC<BarChartProperties> = ({
               { offset: 1, color: '#D83D92' }
             ]
           },
-          // Standard scrollbar behavior: no handles, no detail popups
           handleSize: 0, 
           showDetail: false,
           showDataShadow: false,
@@ -101,12 +108,12 @@ const BarChart: React.FC<BarChartProperties> = ({
         type: "category",
         data: labels,
         axisLabel: {
-          rotate: rotateLabel ?? 30,
+          rotate: isMobile ? 45 : (rotateLabel ?? 30),
           interval: 0,
           color: "#94a3b8",
           fontFamily: 'Inter',
-          fontSize: 10,
-          formatter: (value: string) => value.length > 14 ? value.substring(0, 14) + '...' : value
+          fontSize: isMobile ? 9 : 10,
+          formatter: (value: string) => value.length > (isMobile ? 10 : 14) ? value.substring(0, (isMobile ? 10 : 14)) + '...' : value
         },
         axisLine: { lineStyle: { color: "rgba(255, 255, 255, 0.08)" } },
         axisTick: { show: false }
@@ -117,7 +124,7 @@ const BarChart: React.FC<BarChartProperties> = ({
         axisLabel: {
           color: "#94a3b8",
           fontFamily: 'Inter',
-          fontSize: 10,
+          fontSize: isMobile ? 9 : 10,
           formatter: yFormatter,
         },
         splitLine: {
@@ -158,12 +165,12 @@ const BarChart: React.FC<BarChartProperties> = ({
         },
       ],
     };
-  }, [labels, data, colors, title, rotateLabel, yMax, yFormatter]);
+  }, [labels, data, colors, title, rotateLabel, yMax, yFormatter, isMobile]);
 
   return (
     <ReactECharts
       option={chartConfiguration}
-      style={{ height: 350, width: "100%" }}
+      style={{ height: isMobile ? 300 : 350, width: "100%" }}
       notMerge={false}
       lazyUpdate={true}
     />

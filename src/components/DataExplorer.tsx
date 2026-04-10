@@ -32,14 +32,22 @@ interface DataExplorerProps {
  * ─────────────────────────────────────────────────────────────────────────────
  */
 export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerProps) {
-  // ── 1. STATE MANAGEMENT ──
+  // ── 1. STATE & RESPONSIVENESS ──
   const [searchQuery, setSearchQuery] = useState("");
   const [migrationFilter, setMigrationFilter] = useState("ALL");
   const [prFilter, setPrFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const [isMigrationDropdownOpen, setIsMigrationDropdownOpen] = useState(false);
   const [isPRDropdownOpen, setIsPRDropdownOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const itemsPerPage = 15;
+
+  // Track window resizing for mobile-card toggle
+  useState(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  });
 
   // ── 2. DATA CASCADING & FILTERING ──
   const filteredPlugins = useMemo(() => {
@@ -100,27 +108,27 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
   };
 
   return (
-    <div className="glass-card reveal-node">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: "40px" }}>
+    <div className="glass-card reveal-node" style={{ padding: isMobile ? '20px' : '40px' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: "40px", gap: '20px' }}>
         <div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>TELEMETRY ACCESS</p>
-          <h2 className="title" style={{ fontSize: '32px', margin: 0 }}>Data Explorer</h2>
+          <h2 className="title" style={{ fontSize: isMobile ? '28px' : '32px', margin: 0 }}>Data Explorer</h2>
         </div>
         
         <button 
           onClick={exportToCSV}
           className="tab-btn active"
-          style={{ padding: '8px 24px' }}
+          style={{ padding: '8px 24px', width: isMobile ? '100%' : 'auto' }}
         >
           Download CSV
         </button>
       </div>
       
       {/* 4. THE CONSOLE CONTROLS */}
-      <div style={{ display: 'flex', gap: '20px', marginBottom: '40px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: isMobile ? '24px' : '12px', marginBottom: '40px', alignItems: 'flex-end', flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
         
         {/* Search Input */}
-        <div style={{ flex: 1, minWidth: '300px' }}>
+        <div style={{ flex: 1, minWidth: isMobile ? '100%' : '300px', width: '100%' }}>
           <p style={{ color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>SEARCH REGISTRY</p>
           <div style={{ position: 'relative' }}>
             <input 
@@ -138,7 +146,7 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                 border: '1px solid rgba(255,255,255,0.08)', 
                 background: 'rgba(0,0,0,0.3)', 
                 color: 'white',
-                fontSize: '15px',
+                fontSize: '14px',
                 outline: 'none',
                 transition: 'all 0.3s'
               }}
@@ -146,23 +154,16 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
           </div>
         </div>
         
-        {/* Custom Dropdown Filters */}
-        <div style={{ display: 'flex', gap: '12px' }}>
+        {/* Dropdown Filters */}
+        <div style={{ display: 'flex', gap: '12px', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
           {/* Migration Dropdown */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
             <button 
               onClick={() => { setIsMigrationDropdownOpen(!isMigrationDropdownOpen); setIsPRDropdownOpen(false); }}
               className={`tab-btn ${migrationFilter !== 'ALL' ? 'active' : ''}`}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
-                e.currentTarget.style.boxShadow = '0 0 20px rgba(139, 92, 246, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
               style={{ 
-                minWidth: '220px', 
+                width: '100%',
+                minWidth: isMobile ? '0' : '220px', 
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 alignItems: 'center',
@@ -172,22 +173,22 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                 transition: 'all 0.3s ease'
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className="telemetry-icon-box" style={{ width: '32px', height: '32px', marginBottom: 0 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span className="telemetry-label" style={{ fontSize: '9px' }}>Migration</span>
-                  <span className="telemetry-value" style={{ fontSize: '13px' }}>{migrationFilter === 'ALL' ? 'All Status' : migrationFilter}</span>
+                  <span className="telemetry-label" style={{ fontSize: '8px' }}>Migration</span>
+                  <span className="telemetry-value" style={{ fontSize: '12px' }}>{migrationFilter === 'ALL' ? 'All Status' : migrationFilter}</span>
                 </div>
               </span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isMigrationDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}><path d="M6 9l6 6 6-6"/></svg>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
             </button>
 
             {isMigrationDropdownOpen && (
               <div 
                 className="reveal-node"
-                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '220px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
+                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', minWidth: '200px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
               >
                 {[
                   { value: 'ALL', label: 'All Statuses', color: '#fff' },
@@ -198,17 +199,9 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                   <div 
                     key={opt.value}
                     onClick={() => { setMigrationFilter(opt.value); setIsMigrationDropdownOpen(false); setCurrentPage(1); }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                      e.currentTarget.style.boxShadow = `inset 0 0 10px ${opt.color}22`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    style={{ padding: '12px 16px', borderRadius: '12px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: migrationFilter === opt.value ? opt.color : 'var(--text-secondary)', background: migrationFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '10px' }}
+                    style={{ padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: migrationFilter === opt.value ? opt.color : 'var(--text-secondary)', background: migrationFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
                   >
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: opt.color }}></div>
+                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: opt.color }}></div>
                     {opt.label}
                   </div>
                 ))}
@@ -217,20 +210,13 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
           </div>
 
           {/* PR Dropdown */}
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', flex: 1 }}>
             <button 
               onClick={() => { setIsPRDropdownOpen(!isPRDropdownOpen); setIsMigrationDropdownOpen(false); }}
               className={`tab-btn ${prFilter !== 'ALL' ? 'active' : ''}`}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(96, 165, 250, 0.4)';
-                e.currentTarget.style.boxShadow = '0 0 20px rgba(96, 165, 250, 0.2)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-                e.currentTarget.style.boxShadow = 'none';
-              }}
               style={{ 
-                minWidth: '220px', 
+                width: '100%',
+                minWidth: isMobile ? '0' : '220px', 
                 display: 'flex', 
                 justifyContent: 'space-between', 
                 alignItems: 'center',
@@ -240,22 +226,22 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                 transition: 'all 0.3s ease'
               }}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div className="telemetry-icon-box" style={{ width: '32px', height: '32px', marginBottom: 0, color: '#60A5FA', borderColor: 'rgba(96, 165, 250, 0.2)', backgroundColor: 'rgba(96, 165, 250, 0.1)' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: '#60A5FA', borderColor: 'rgba(96, 165, 250, 0.2)', backgroundColor: 'rgba(96, 165, 250, 0.1)' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span className="telemetry-label" style={{ fontSize: '9px' }}>Pull Request</span>
-                  <span className="telemetry-value" style={{ fontSize: '13px' }}>{prFilter === 'ALL' ? 'All PRs' : prFilter}</span>
+                  <span className="telemetry-label" style={{ fontSize: '8px' }}>Pull Request</span>
+                  <span className="telemetry-value" style={{ fontSize: '12px' }}>{prFilter === 'ALL' ? 'All PRs' : prFilter}</span>
                 </div>
               </span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ transform: isPRDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)' }}><path d="M6 9l6 6 6-6"/></svg>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
             </button>
 
             {isPRDropdownOpen && (
               <div 
                 className="reveal-node"
-                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '220px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '10px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
+                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', minWidth: '200px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
               >
                 {[
                   { value: 'ALL', label: 'All PRs', color: '#fff' },
@@ -267,17 +253,9 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                   <div 
                     key={opt.value}
                     onClick={() => { setPrFilter(opt.value); setIsPRDropdownOpen(false); setCurrentPage(1); }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                      e.currentTarget.style.boxShadow = `inset 0 0 10px ${opt.color}22`;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}
-                    style={{ padding: '12px 16px', borderRadius: '12px', cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: prFilter === opt.value ? opt.color : 'var(--text-secondary)', background: prFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '10px' }}
+                    style={{ padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: prFilter === opt.value ? opt.color : 'var(--text-secondary)', background: prFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
                   >
-                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: opt.color }}></div>
+                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: opt.color }}></div>
                     {opt.label}
                   </div>
                 ))}
@@ -287,75 +265,118 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
         </div>
       </div>
 
-      {/* 5. THE RESULTS TABLE */}
-      <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
-              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Plugin Entity</th>
-              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Migration</th>
-              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Pull Request</th>
-              <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Last Analysis</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paginatedData.map((plugin) => {
-              const migration = plugin.migrations[0];
-              return (
-                <tr 
-                  key={plugin.pluginName} 
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
-                >
-                  <td style={{ padding: '16px 20px' }}>
-                    <span 
-                      onClick={() => onPluginSelect(plugin.pluginName)}
-                      style={{ cursor: 'pointer', color: 'white', fontWeight: 600, fontSize: '15px' }}
-                    >
-                      {plugin.pluginName}
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px 20px' }}>
-                    <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
-                       {migration.migrationStatus || "UNKNOWN"}
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px 20px' }}>
-                    <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
-                       {(migration.pullRequestStatus || 'unknown').replace("_", " ")}
-                    </span>
-                  </td>
-                  <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    {formatTimestamp(migration.timestamp)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* 5. THE RESULTS (Table or Cards) */}
+      {!isMobile ? (
+        <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+                <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Plugin Entity</th>
+                <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Migration</th>
+                <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Pull Request</th>
+                <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Last Analysis</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedData.map((plugin) => {
+                const migration = plugin.migrations[0];
+                return (
+                  <tr 
+                    key={plugin.pluginName} 
+                    style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <td style={{ padding: '16px 20px' }}>
+                      <span 
+                        onClick={() => onPluginSelect(plugin.pluginName)}
+                        style={{ cursor: 'pointer', color: 'white', fontWeight: 600, fontSize: '15px' }}
+                      >
+                        {plugin.pluginName}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 20px' }}>
+                      <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
+                         {migration.migrationStatus || "UNKNOWN"}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 20px' }}>
+                      <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
+                         {(migration.pullRequestStatus || 'unknown').replace("_", " ")}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                      {formatTimestamp(migration.timestamp)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {paginatedData.map((plugin) => {
+            const migration = plugin.migrations[0];
+            return (
+              <div 
+                key={plugin.pluginName}
+                onClick={() => onPluginSelect(plugin.pluginName)}
+                className="animate-fade-up"
+                style={{ 
+                  background: 'rgba(255,255,255,0.03)', 
+                  border: '1px solid rgba(255,255,255,0.06)', 
+                  borderRadius: '24px', 
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '16px'
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <h3 style={{ color: 'white', fontSize: '18px', fontWeight: 700, margin: 0, flex: 1 }}>{plugin.pluginName}</h3>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
+                    {migration.migrationStatus || "UNKNOWN"}
+                  </span>
+                  <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
+                    {(migration.pullRequestStatus || 'unknown').replace("_", " ")}
+                  </span>
+                </div>
+
+                <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  {formatTimestamp(migration.timestamp)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* 6. PAGINATION CONTROLS */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px' }}>
-        <span style={{ fontSize: '13px', color: 'var(--text-secondary)', letterSpacing: '0.5px' }}>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px', gap: '20px' }}>
+        <span style={{ fontSize: '12px', color: 'var(--text-secondary)', letterSpacing: '0.5px', textAlign: 'center' }}>
           TRACE COMPLETED: {filteredPlugins.length} ENTITIES FOUND
         </span>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-end' }}>
           <button 
             className="tab-btn"
             disabled={currentPage === 1}
             onClick={() => setCurrentPage(prev => prev - 1)}
-            style={{ opacity: currentPage === 1 ? 0.3 : 1 }}
+            style={{ opacity: currentPage === 1 ? 0.3 : 1, padding: isMobile ? '8px 20px' : '10px 24px' }}
           >
-            Previous
+            Prev
           </button>
           <span style={{ fontSize: '13px', color: 'white', fontWeight: 'bold' }}>{currentPage} / {totalPages || 1}</span>
           <button 
             className="tab-btn"
             disabled={currentPage >= totalPages}
             onClick={() => setCurrentPage(prev => prev + 1)}
-            style={{ opacity: currentPage >= totalPages ? 0.3 : 1 }}
+            style={{ opacity: currentPage >= totalPages ? 0.3 : 1, padding: isMobile ? '8px 20px' : '10px 24px' }}
           >
             Next
           </button>
