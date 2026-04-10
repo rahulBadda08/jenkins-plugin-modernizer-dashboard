@@ -201,10 +201,31 @@
     justify-content: flex-start;
     padding: 8px 12px;
     -webkit-overflow-scrolling: touch;
-    scrollbar-width: none; /* Hide for Firefox */
+    /* Show cinematic scrollbar on mobile */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
   }
   
-  .tabs-container::-webkit-scrollbar { display: none; } /* Hide for Chrome/Safari */
+  .tabs-container::-webkit-scrollbar { 
+    display: block; 
+    height: 4px; 
+  }
+  
+  .tabs-container::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .tabs-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+  }
+  
+  .plugin-name {
+    word-break: break-all;
+    overflow-wrap: anywhere;
+    display: inline-block;
+    max-width: 100%;
+  }
   
   .tab-btn {
     padding: 8px 18px;

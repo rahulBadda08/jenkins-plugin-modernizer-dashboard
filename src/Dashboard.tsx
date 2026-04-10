@@ -3,7 +3,7 @@ import BarChart from "./components/BarChart";
 import PieChart from "./components/PieChart";
 import DataExplorer from "./components/DataExplorer";
 import allPluginsRaw from "./data/all_plugins.json";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 
 // ── STRICT TYPESCRIPT DEFINITIONS ──
 type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
@@ -34,6 +34,56 @@ interface PluginData {
 function Dashboard() {
   const allPluginsData = allPluginsRaw as unknown as PluginData[];
   const [currentlyActiveTab, setCurrentlyActiveTab] = useState<string>("Global Overview");
+
+  // ── ROUTING & HISTORY SYNCHRONIZATION ──
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.replace("#/", "").toLowerCase();
+      if (!hash || hash === "") {
+        setCurrentlyActiveTab("Global Overview");
+        return;
+      }
+
+      // Map Hash to Tab State
+      const tabMap: Record<string, string> = {
+        "overview": "Global Overview",
+        "topics": "Topic Dashboards",
+        "explorer": "Data Explorer",
+        "methodology": "Methodology"
+      };
+
+      if (tabMap[hash]) {
+        setCurrentlyActiveTab(tabMap[hash]);
+      } else if (hash.startsWith("plugin/")) {
+        // Handle Plugin Detail Deep Links
+        const pluginName = decodeURIComponent(hash.replace("plugin/", ""));
+        const exists = allPluginsData.some(p => p.pluginName === pluginName);
+        if (exists) setCurrentlyActiveTab(pluginName);
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    handleHashChange(); // Sync on mount
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, [allPluginsData]);
+
+  // Update hash when tab state changes
+  useEffect(() => {
+    const tabToHash: Record<string, string> = {
+      "Global Overview": "overview",
+      "Topic Dashboards": "topics",
+      "Data Explorer": "explorer",
+      "Methodology": "methodology"
+    };
+
+    const targetHash = tabToHash[currentlyActiveTab] 
+      ? `/${tabToHash[currentlyActiveTab]}`
+      : `/plugin/${encodeURIComponent(currentlyActiveTab)}`;
+
+    if (window.location.hash !== `#${targetHash}`) {
+      window.history.pushState(null, "", `#${targetHash}`);
+    }
+  }, [currentlyActiveTab]);
 
   const pluginsWithValidMigrationData = useMemo(() => 
     allPluginsData.filter(plugin => plugin.migrations && plugin.migrations.length > 0),
