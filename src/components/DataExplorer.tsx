@@ -18,9 +18,23 @@ interface PluginData {
   migrations: Migration[];
 }
 
+const formatLabel = (str: string) => {
+  if (!str) return str;
+  return str
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+};
+
 interface DataExplorerProps {
   plugins: PluginData[];
   onPluginSelect: (pluginName: string) => void;
+  externalSearch?: string;
+  roadmapList?: string[];
+  legacyAlignmentList?: string[];
+  onClearExternal?: () => void;
 }
 
 /**
@@ -31,7 +45,14 @@ interface DataExplorerProps {
  * computations rather than directly hammering the DOM with 400+ rows.
  * ─────────────────────────────────────────────────────────────────────────────
  */
-export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerProps) {
+export default function DataExplorer({ 
+  plugins, 
+  onPluginSelect, 
+  externalSearch, 
+  roadmapList, 
+  legacyAlignmentList,
+  onClearExternal 
+}: DataExplorerProps) {
   // ── 1. STATE & RESPONSIVENESS ──
   const [searchQuery, setSearchQuery] = useState("");
   const [migrationFilter, setMigrationFilter] = useState("ALL");
@@ -56,6 +77,16 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
       if (!hasMigrations) return false;
 
       const matchesSearch = plugin.pluginName.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      // Handle External Intelligence Triggers (Only if search query is empty)
+      if (!searchQuery) {
+        if (externalSearch === "ROADMAP_TOP_20" && roadmapList) {
+          if (!roadmapList.includes(plugin.pluginName)) return false;
+        } else if (externalSearch === "LEGACY_BASELINE" && legacyAlignmentList) {
+          if (!legacyAlignmentList.includes(plugin.pluginName)) return false;
+        }
+      }
       
       let latestStatus = plugin.migrations[0].migrationStatus || "UNKNOWN";
       if (latestStatus.toUpperCase() === "FAILURE") latestStatus = "FAIL";
@@ -112,7 +143,14 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: "40px", gap: '20px' }}>
         <div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>TELEMETRY ACCESS</p>
-          <h2 className="title" style={{ fontSize: isMobile ? '28px' : '32px', margin: 0 }}>Data Explorer</h2>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h2 className="title" style={{ fontSize: isMobile ? '28px' : '32px', margin: 0 }}>Data Explorer</h2>
+            {externalSearch && (
+              <span className="system-status-tag" style={{ background: 'var(--accent-amber)', color: 'black', border: 'none' }}>
+                {externalSearch} ACTIVE
+              </span>
+            )}
+          </div>
         </div>
         
         <button 
@@ -130,12 +168,13 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
         {/* Search Input */}
         <div style={{ flex: 1, minWidth: isMobile ? '100%' : '300px', width: '100%' }}>
           <p style={{ color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>SEARCH REGISTRY</p>
-          <div style={{ position: 'relative' }}>
+          <div style={{ position: 'relative', width: '100%' }}>
             <input 
               type="text" 
-              placeholder="Filter by plugin name..." 
+              placeholder={externalSearch ? `ACTIVE_FILTER: ${externalSearch}` : "Filter by plugin name..."} 
               value={searchQuery}
               onChange={(e) => {
+                if (externalSearch && onClearExternal) onClearExternal();
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
@@ -148,9 +187,16 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                 color: 'white',
                 fontSize: '14px',
                 outline: 'none',
-                transition: 'all 0.3s'
+                transition: 'all 0.3s',
+                boxShadow: externalSearch && !searchQuery ? '0 0 15px rgba(245, 158, 11, 0.1)' : 'none'
               }}
             />
+            {externalSearch && !searchQuery && (
+              <div className="search-beacon">
+                {externalSearch === "ROADMAP_TOP_20" ? "Top 20 Priority" : "Core Alignment Queue"}
+                <span className="pulse-dot warning"></span>
+              </div>
+            )}
           </div>
         </div>
         
@@ -192,9 +238,9 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
               >
                 {[
                   { value: 'ALL', label: 'All Statuses', color: '#fff' },
-                  { value: 'SUCCESS', label: 'SUCCESS', color: '#34D399' },
-                  { value: 'FAIL', label: 'FAIL', color: '#F87171' },
-                  { value: 'UNKNOWN', label: 'UNKNOWN', color: '#94a3b8' }
+                  { value: 'SUCCESS', label: 'Success', color: '#34D399' },
+                  { value: 'FAIL', label: 'Fail', color: '#F87171' },
+                  { value: 'UNKNOWN', label: 'Unknown', color: '#94a3b8' }
                 ].map(opt => (
                   <div 
                     key={opt.value}
@@ -244,11 +290,11 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                 style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', minWidth: '200px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
               >
                 {[
-                  { value: 'ALL', label: 'All PRs', color: '#fff' },
-                  { value: 'MERGED', label: 'MERGED', color: '#A78BFA' },
-                  { value: 'OPEN', label: 'OPEN', color: '#60A5FA' },
-                  { value: 'CLOSED', label: 'CLOSED', color: '#F87171' },
-                  { value: 'UNKNOWN', label: 'UNKNOWN', color: '#94a3b8' }
+                  { value: 'ALL', label: 'All Lifecycle', color: '#fff' },
+                  { value: 'MERGED', label: 'Merged', color: '#818CF8' },
+                  { value: 'OPEN', label: 'Open', color: '#34D399' },
+                  { value: 'CLOSED', label: 'Closed', color: '#F87171' },
+                  { value: 'DRAFT', label: 'Draft', color: '#94a3b8' }
                 ].map(opt => (
                   <div 
                     key={opt.value}
@@ -297,12 +343,12 @@ export default function DataExplorer({ plugins, onPluginSelect }: DataExplorerPr
                     </td>
                     <td style={{ padding: '16px 20px' }}>
                       <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
-                         {migration.migrationStatus || "UNKNOWN"}
+                         {formatLabel(migration.migrationStatus || "UNKNOWN")}
                       </span>
                     </td>
                     <td style={{ padding: '16px 20px' }}>
                       <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
-                         {(migration.pullRequestStatus || 'unknown').replace("_", " ")}
+                         {formatLabel(migration.pullRequestStatus || 'unknown')}
                       </span>
                     </td>
                     <td style={{ padding: '16px 20px', fontSize: '13px', color: 'var(--text-secondary)' }}>

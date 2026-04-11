@@ -11,6 +11,8 @@ import ReactECharts from "echarts-for-react";
 interface BarChartProperties {
   labels: string[];
   data: number[];
+  insights?: string[];
+  severities?: string[];
   colors?: string[];
   title?: string;
   rotateLabel?: number;
@@ -18,9 +20,19 @@ interface BarChartProperties {
   yFormatter?: (value: number) => string;
 }
 
+const SEVERITY_COLORS = {
+  danger: "#EF4444",
+  warning: "#F59E0B",
+  success: "#10B981",
+  info: "#3B82F6",
+  default: "#8B5CF6"
+};
+
 const BarChart: React.FC<BarChartProperties> = ({
   labels,
   data,
+  insights,
+  severities,
   colors,
   title,
   rotateLabel,
@@ -44,6 +56,25 @@ const BarChart: React.FC<BarChartProperties> = ({
     const isNewData = prevLabelsRef.current !== labels;
     prevLabelsRef.current = labels;
 
+    // Inject semantic coloring for bars
+    const barData = data.map((val, idx) => {
+      const severity = severities?.[idx];
+      const mainColor = severity ? SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS] : (colors?.[idx] || "#8B5CF6");
+      return {
+        value: val,
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: mainColor },
+              { offset: 1, color: mainColor + '33' } // 20% opacity
+            ]
+          }
+        }
+      };
+    });
+
     return {
       title: {
         text: title,
@@ -57,12 +88,20 @@ const BarChart: React.FC<BarChartProperties> = ({
       animationDelay: (idx: number) => idx * 25,
       tooltip: { 
         trigger: 'axis',
-        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+        backgroundColor: 'rgba(15, 23, 42, 0.95)',
         borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#fff', fontFamily: 'Inter' },
+        textStyle: { color: '#fff', fontFamily: 'Inter', fontSize: 13 },
         borderRadius: 12,
-        padding: 12,
-        backdropFilter: 'blur(12px)'
+        padding: 16,
+        backdropFilter: 'blur(12px)',
+        formatter: (params: any) => {
+          const p = params[0];
+          const insightText = insights?.[p.dataIndex];
+          const insightHtml = insightText ? `<div style="margin-top: 10px; font-size: 11px; opacity: 0.7; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; white-space: normal; line-height: 1.5; max-width: 240px;">${insightText}</div>` : '';
+          return `<div style="font-weight: 700;">${p.name}</div>
+                  <div style="font-family: 'JetBrains Mono'; margin-top: 4px; color: ${p.color};">${p.value} UNITS</div>
+                  ${insightHtml}`;
+        }
       },
       grid: {
         left: "4%",
@@ -83,15 +122,7 @@ const BarChart: React.FC<BarChartProperties> = ({
           height: 12,
           bottom: isMobile ? 10 : 25,
           backgroundColor: "rgba(255, 255, 255, 0.05)",
-          fillerColor: {
-            type: 'linear',
-            x: 0, y: 0, x2: 1, y2: 0,
-            colorStops: [
-              { offset: 0, color: '#6A89E6' }, 
-              { offset: 0.5, color: '#8E5FE2' }, 
-              { offset: 1, color: '#D83D92' }
-            ]
-          },
+          fillerColor: "rgba(255, 255, 255, 0.1)",
           handleSize: 0, 
           showDetail: false,
           showDataShadow: false,
@@ -134,38 +165,22 @@ const BarChart: React.FC<BarChartProperties> = ({
       },
       series: [
         {
-          data: data,
+          data: barData,
           type: "bar",
           barWidth: '60%',
           itemStyle: {
-            color: {
-              type: 'linear',
-              x: 0, y: 0, x2: 0, y2: 1,
-              colorStops: [
-                { offset: 0, color: 'rgba(139, 92, 246, 0.8)' },
-                { offset: 1, color: 'rgba(139, 92, 246, 0.2)' }
-              ]
-            },
             borderRadius: [10, 10, 10, 10]
           },
           emphasis: {
             itemStyle: {
-              color: {
-                type: 'linear',
-                x: 0, y: 0, x2: 0, y2: 1,
-                colorStops: [
-                  { offset: 0, color: 'rgba(6, 182, 212, 1)' },
-                  { offset: 1, color: 'rgba(6, 182, 212, 0.4)' }
-                ]
-              },
               shadowBlur: 20,
-              shadowColor: "rgba(6, 182, 212, 0.5)"
+              shadowColor: "rgba(255, 255, 255, 0.2)"
             }
           }
         },
       ],
     };
-  }, [labels, data, colors, title, rotateLabel, yMax, yFormatter, isMobile]);
+  }, [labels, data, colors, title, rotateLabel, yMax, yFormatter, isMobile, insights, severities]);
 
   return (
     <ReactECharts
