@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
 // We copy the exact same TypeScript definitions to stay safe
 type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
@@ -32,34 +32,25 @@ interface DataExplorerProps {
   plugins: PluginData[];
   onPluginSelect: (pluginName: string) => void;
   externalSearch?: string;
+  externalMigrationFilter?: string;
+  externalPrFilter?: string;
   roadmapList?: string[];
   legacyAlignmentList?: string[];
   onClearExternal?: () => void;
 }
 
-/**
- * ─────────────────────────────────────────────────────────────────────────────
- * PLUGIN DATA EXPLORER (Interactive Paginated Table Component)
- * Defines the UI and functional hooks for parsing the raw Jenkins ecosystem dataset.
- * It natively bypasses browser lag by utilizing local pagination and useMemo
- * computations rather than directly hammering the DOM with 400+ rows.
- * ─────────────────────────────────────────────────────────────────────────────
- */
 export default function DataExplorer({ 
   plugins, 
   onPluginSelect, 
   externalSearch, 
+  externalMigrationFilter = "ALL",
+  externalPrFilter = "ALL",
   roadmapList, 
   legacyAlignmentList,
   onClearExternal 
 }: DataExplorerProps) {
   // ── 1. STATE & RESPONSIVENESS ──
-  const [searchQuery, setSearchQuery] = useState("");
-  const [migrationFilter, setMigrationFilter] = useState("ALL");
-  const [prFilter, setPrFilter] = useState("ALL");
   const [currentPage, setCurrentPage] = useState(1);
-  const [isMigrationDropdownOpen, setIsMigrationDropdownOpen] = useState(false);
-  const [isPRDropdownOpen, setIsPRDropdownOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const itemsPerPage = 15;
 
@@ -70,35 +61,15 @@ export default function DataExplorer({
     return () => window.removeEventListener("resize", handleResize);
   });
 
-  // ── 2. DATA CASCADING & FILTERING ──
-  const filteredPlugins = useMemo(() => {
-    return plugins.filter((plugin) => {
-      const hasMigrations = plugin.migrations && plugin.migrations.length > 0;
-      if (!hasMigrations) return false;
+  // ── 2. DATA CASCADING & RESET ──
+  // Reset pagination when the filter changes (plugins prop)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [plugins, externalSearch, externalMigrationFilter]);
 
-      const matchesSearch = plugin.pluginName.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
-
-      // Handle External Intelligence Triggers (Only if search query is empty)
-      if (!searchQuery) {
-        if (externalSearch === "ROADMAP_TOP_20" && roadmapList) {
-          if (!roadmapList.includes(plugin.pluginName)) return false;
-        } else if (externalSearch === "LEGACY_BASELINE" && legacyAlignmentList) {
-          if (!legacyAlignmentList.includes(plugin.pluginName)) return false;
-        }
-      }
-      
-      let latestStatus = plugin.migrations[0].migrationStatus || "UNKNOWN";
-      if (latestStatus.toUpperCase() === "FAILURE") latestStatus = "FAIL";
-      
-      const matchesMigration = migrationFilter === "ALL" || latestStatus.toUpperCase() === migrationFilter.toUpperCase();
-
-      const prStat = plugin.migrations[0].pullRequestStatus || "UNKNOWN";
-      const matchesPR = prFilter === "ALL" || prStat.toUpperCase() === prFilter.toUpperCase();
-
-      return matchesSearch && matchesMigration && matchesPR;
-    });
-  }, [plugins, searchQuery, migrationFilter, prFilter]);
+  // The parent (Dashboard.tsx) handles all semantic filtering (Severity, PR, Topic, Search).
+  // DataExplorer simply renders the resultant 'plugins' array.
+  const filteredPlugins = plugins;
 
   // ── 3. PAGINATION ENGINE ──
   const totalPages = Math.ceil(filteredPlugins.length / itemsPerPage);
@@ -116,30 +87,105 @@ export default function DataExplorer({
     return isNaN(d.getTime()) ? ts : d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  const exportToCSV = () => {
-    const headers = ["Plugin Name", "Migration Status", "PR Status", "Latest Run"];
-    const csvRows = [headers.join(",")];
-    filteredPlugins.forEach(plugin => {
-      const migration = plugin.migrations[0];
-      const row = [
-        `"${plugin.pluginName}"`,
-        `"${migration.migrationStatus || 'UNKNOWN'}"`,
-        `"${(migration.pullRequestStatus || 'UNKNOWN').replace("_", " ")}"`,
-        `"${formatTimestamp(migration.timestamp)}"`
+  const exportToExcel = async () => {
+    try {
+      // Lazy load ExcelJS using the direct pre-bundled distribution file.
+      // This bypasses Vite's strict dependency optimizer cache which throws fetch errors
+      // if the dev server was not entirely rebooted after the npm installation.
+      // @ts-expect-error: TypeScript lacks implicit type maps for direct pre-bundled JS distribution sub-paths
+      const ExcelJS = await import('exceljs/dist/exceljs.min.js');
+      
+      // Initialize standard workbook handling both ESM and CommonJS resolving formats
+      const WorkbookClass = ExcelJS.Workbook || (ExcelJS as any).default?.Workbook || (window as any).ExcelJS?.Workbook;
+      if (!WorkbookClass) {
+        throw new Error("ExcelJS Workbook constructor failed to resolve from module.");
+      }
+      const workbook = new WorkbookClass();
+      
+      workbook.creator = 'Jenkins Plugin Modernizer Engine';
+      workbook.created = new Date();
+      
+      // Add styled sheet
+      const sheet = workbook.addWorksheet('Telemetry Snapshot', {
+        properties: { tabColor: { argb: 'FF0F1524' } },
+        views: [{ state: 'frozen', ySplit: 1 }]
+      });
+
+      // Structure columns
+      sheet.columns = [
+        { header: 'PLUGIN_NAME', key: 'pluginName', width: 45 },
+        { header: 'MIGRATION_STATUS', key: 'migrationStatus', width: 25 },
+        { header: 'PR_STATUS', key: 'prStatus', width: 20 },
+        { header: 'REPOSITORY_ACTION_LINK', key: 'actionUrl', width: 50 },
+        { header: 'LAST_ANALYSIS_DATE', key: 'analysisDate', width: 30 }
       ];
-      csvRows.push(row.join(","));
-    });
-    const blob = new Blob([csvRows.join("\n")], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const exportNode = document.createElement('a');
-    exportNode.href = url;
-    exportNode.download = 'jenkins_filtered_plugins.csv';
-    exportNode.click();
-    URL.revokeObjectURL(url);
+
+      // Style the Header Row
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { name: 'Arial', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF151C2F' }
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 30;
+
+      // Load data
+      filteredPlugins.forEach(plugin => {
+        const migration = plugin.migrations?.[0];
+        const pName = plugin.pluginName;
+        const mStatus = (migration?.migrationStatus || 'UNKNOWN').toUpperCase();
+        const prStatus = (migration?.pullRequestStatus || 'UNKNOWN').replace("_", " ").toUpperCase();
+        const ts = formatTimestamp(migration?.timestamp || "");
+        
+        const prUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
+
+        const row = sheet.addRow({
+          pluginName: pName,
+          migrationStatus: mStatus,
+          prStatus: prStatus,
+          actionUrl: prUrl ? { text: 'View Repository / PR', hyperlink: prUrl } : 'N/A',
+          analysisDate: ts
+        });
+
+        // Style row alignments
+        row.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+        row.height = 25;
+
+        // Color coding specific badges
+        const statusCell = row.getCell('migrationStatus');
+        statusCell.font = { bold: true };
+        if (mStatus === 'SUCCESS') statusCell.font.color = { argb: 'FF10B981' };
+        else if (mStatus === 'FAILURE' || mStatus === 'FAIL') statusCell.font.color = { argb: 'FFEF4444' };
+        else if (mStatus === 'UNKNOWN') statusCell.font.color = { argb: 'FFFF5500' };
+        else statusCell.font.color = { argb: 'FFF59E0B' };
+
+        // Action URL styling
+        const urlCell = row.getCell('actionUrl');
+        if (prUrl) {
+          urlCell.font = { color: { argb: 'FF3B82F6' }, underline: true };
+        }
+      });
+
+      // Export to Buffer and force download
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      const fileSaverModule = await import('file-saver');
+      const saveAs = fileSaverModule.saveAs || fileSaverModule.default?.saveAs || (fileSaverModule as any).default;
+      if (typeof saveAs !== 'function') throw new Error("FileSaver couldn't be loaded properly.");
+      
+      saveAs(blob, 'Jenkins_Telemetry_Snapshot.xlsx');
+    } catch (err: any) {
+      console.error("Excel Generation Error:", err);
+      // Fallback alert for the user if processing crashes
+      window.alert("Export Error: " + (err.message || 'The snapshot engine encountered an issue rendering the spreadsheet.'));
+    }
   };
 
   return (
-    <div className="glass-card reveal-node" style={{ padding: isMobile ? '20px' : '40px' }}>
+    <div className="glass-card reveal-node animate-fade-up" style={{ padding: isMobile ? '20px' : '40px' }}>
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: "40px", gap: '20px' }}>
         <div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '11px', letterSpacing: '2px', textTransform: 'uppercase', marginBottom: '4px' }}>TELEMETRY ACCESS</p>
@@ -154,164 +200,22 @@ export default function DataExplorer({
         </div>
         
         <button 
-          onClick={exportToCSV}
-          className="tab-btn active"
-          style={{ padding: '8px 24px', width: isMobile ? '100%' : 'auto' }}
+          onClick={exportToExcel}
+          className="tab-btn" 
+          style={{ width: isMobile ? '100%' : 'auto', display: 'flex', justifyContent: 'center' }}
         >
-          Download CSV
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          DOWNLOAD
         </button>
       </div>
-      
+
       {/* 4. THE CONSOLE CONTROLS */}
-      <div style={{ display: 'flex', gap: isMobile ? '24px' : '12px', marginBottom: '40px', alignItems: 'flex-end', flexWrap: 'wrap', flexDirection: isMobile ? 'column' : 'row' }}>
-        
-        {/* Search Input */}
-        <div style={{ flex: 1, minWidth: isMobile ? '100%' : '300px', width: '100%' }}>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 'bold', marginBottom: '8px', letterSpacing: '1px' }}>SEARCH REGISTRY</p>
-          <div style={{ position: 'relative', width: '100%' }}>
-            <input 
-              type="text" 
-              placeholder={externalSearch ? `ACTIVE_FILTER: ${externalSearch}` : "Filter by plugin name..."} 
-              value={searchQuery}
-              onChange={(e) => {
-                if (externalSearch && onClearExternal) onClearExternal();
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              style={{ 
-                width: '100%', 
-                padding: '16px 20px', 
-                borderRadius: '16px', 
-                border: '1px solid rgba(255,255,255,0.08)', 
-                background: 'rgba(0,0,0,0.3)', 
-                color: 'white',
-                fontSize: '14px',
-                outline: 'none',
-                transition: 'all 0.3s',
-                boxShadow: externalSearch && !searchQuery ? '0 0 15px rgba(245, 158, 11, 0.1)' : 'none'
-              }}
-            />
-            {externalSearch && !searchQuery && (
-              <div className="search-beacon">
-                {externalSearch === "ROADMAP_TOP_20" ? "Top 20 Priority" : "Core Alignment Queue"}
-                <span className="pulse-dot warning"></span>
-              </div>
-            )}
-          </div>
-        </div>
-        
-        {/* Dropdown Filters */}
-        <div style={{ display: 'flex', gap: '12px', width: isMobile ? '100%' : 'auto', flexDirection: isMobile ? 'column' : 'row' }}>
-          {/* Migration Dropdown */}
-          <div style={{ position: 'relative', flex: 1 }}>
-            <button 
-              onClick={() => { setIsMigrationDropdownOpen(!isMigrationDropdownOpen); setIsPRDropdownOpen(false); }}
-              className={`tab-btn ${migrationFilter !== 'ALL' ? 'active' : ''}`}
-              style={{ 
-                width: '100%',
-                minWidth: isMobile ? '0' : '220px', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '8px 16px',
-                background: 'rgba(0,0,0,0.3)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0 }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span className="telemetry-label" style={{ fontSize: '8px' }}>Migration</span>
-                  <span className="telemetry-value" style={{ fontSize: '12px' }}>{migrationFilter === 'ALL' ? 'All Status' : migrationFilter}</span>
-                </div>
-              </span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-
-            {isMigrationDropdownOpen && (
-              <div 
-                className="reveal-node"
-                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', minWidth: '200px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
-              >
-                {[
-                  { value: 'ALL', label: 'All Statuses', color: '#fff' },
-                  { value: 'SUCCESS', label: 'Success', color: '#34D399' },
-                  { value: 'FAIL', label: 'Fail', color: '#F87171' },
-                  { value: 'UNKNOWN', label: 'Unknown', color: '#94a3b8' }
-                ].map(opt => (
-                  <div 
-                    key={opt.value}
-                    onClick={() => { setMigrationFilter(opt.value); setIsMigrationDropdownOpen(false); setCurrentPage(1); }}
-                    style={{ padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: migrationFilter === opt.value ? opt.color : 'var(--text-secondary)', background: migrationFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: opt.color }}></div>
-                    {opt.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* PR Dropdown */}
-          <div style={{ position: 'relative', flex: 1 }}>
-            <button 
-              onClick={() => { setIsPRDropdownOpen(!isPRDropdownOpen); setIsMigrationDropdownOpen(false); }}
-              className={`tab-btn ${prFilter !== 'ALL' ? 'active' : ''}`}
-              style={{ 
-                width: '100%',
-                minWidth: isMobile ? '0' : '220px', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
-                padding: '8px 16px',
-                background: 'rgba(0,0,0,0.3)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: '#60A5FA', borderColor: 'rgba(96, 165, 250, 0.2)', backgroundColor: 'rgba(96, 165, 250, 0.1)' }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7"/><line x1="6" y1="9" x2="6" y2="21"/></svg>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <span className="telemetry-label" style={{ fontSize: '8px' }}>Pull Request</span>
-                  <span className="telemetry-value" style={{ fontSize: '12px' }}>{prFilter === 'ALL' ? 'All PRs' : prFilter}</span>
-                </div>
-              </span>
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-
-            {isPRDropdownOpen && (
-              <div 
-                className="reveal-node"
-                style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', minWidth: '200px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(32px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.6)' }}
-              >
-                {[
-                  { value: 'ALL', label: 'All Lifecycle', color: '#fff' },
-                  { value: 'MERGED', label: 'Merged', color: '#818CF8' },
-                  { value: 'OPEN', label: 'Open', color: '#34D399' },
-                  { value: 'CLOSED', label: 'Closed', color: '#F87171' },
-                  { value: 'DRAFT', label: 'Draft', color: '#94a3b8' }
-                ].map(opt => (
-                  <div 
-                    key={opt.value}
-                    onClick={() => { setPrFilter(opt.value); setIsPRDropdownOpen(false); setCurrentPage(1); }}
-                    style={{ padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: prFilter === opt.value ? opt.color : 'var(--text-secondary)', background: prFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: '8px' }}
-                  >
-                    <div style={{ width: '5px', height: '5px', borderRadius: '50%', background: opt.color }}></div>
-                    {opt.label}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: '24px', marginBottom: '40px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         </div>
       </div>
 
-      {/* 5. THE RESULTS (Table or Cards) */}
+      {/* 5. THE RESULTS */}
       {!isMobile ? (
         <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -325,7 +229,7 @@ export default function DataExplorer({
             </thead>
             <tbody>
               {paginatedData.map((plugin) => {
-                const migration = plugin.migrations[0];
+                const migration = plugin.migrations?.[0] || {} as Migration;
                 return (
                   <tr 
                     key={plugin.pluginName} 
@@ -334,12 +238,20 @@ export default function DataExplorer({
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
                     <td style={{ padding: '16px 20px' }}>
-                      <span 
-                        onClick={() => onPluginSelect(plugin.pluginName)}
-                        style={{ cursor: 'pointer', color: 'white', fontWeight: 600, fontSize: '15px' }}
-                      >
-                        {plugin.pluginName}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span 
+                          onClick={() => onPluginSelect(plugin.pluginName)}
+                          style={{ cursor: 'pointer', color: 'white', fontWeight: 600, fontSize: '15px' }}
+                        >
+                          {plugin.pluginName}
+                        </span>
+                        {roadmapList?.includes(plugin.pluginName) && (
+                          <span style={{ fontSize: '10px', background: 'rgba(96, 165, 250, 0.1)', color: 'var(--accent-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>ROADMAP</span>
+                        )}
+                        {legacyAlignmentList?.includes(plugin.pluginName) && (
+                          <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>LEGACY</span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ padding: '16px 20px' }}>
                       <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
@@ -363,7 +275,7 @@ export default function DataExplorer({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {paginatedData.map((plugin) => {
-            const migration = plugin.migrations[0];
+            const migration = plugin.migrations?.[0] || {} as Migration;
             return (
               <div 
                 key={plugin.pluginName}
@@ -385,6 +297,12 @@ export default function DataExplorer({
                 </div>
                 
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {roadmapList?.includes(plugin.pluginName) && (
+                    <span style={{ fontSize: '10px', background: 'rgba(96, 165, 250, 0.1)', color: 'var(--accent-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>ROADMAP</span>
+                  )}
+                  {legacyAlignmentList?.includes(plugin.pluginName) && (
+                    <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>LEGACY</span>
+                  )}
                   <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
                     {migration.migrationStatus || "UNKNOWN"}
                   </span>
@@ -406,7 +324,6 @@ export default function DataExplorer({
       {/* 6. PAGINATION CONTROLS */}
       <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: '30px', gap: '20px' }}>
         <span style={{ fontSize: '12px', color: 'var(--text-secondary)', letterSpacing: '0.5px', textAlign: 'center' }}>
-          TRACE COMPLETED: {filteredPlugins.length} ENTITIES FOUND
         </span>
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-end' }}>
           <button 

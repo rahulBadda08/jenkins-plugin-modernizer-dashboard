@@ -4,10 +4,66 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Jenkins Plugin Modernizer Dashboard - Unified telemetry, diagnostic starbursts, and analytical matrices for the GSoC 2026 ecosystem modernization engine." />
     <title>Plugin Modernizer Stats Visualization</title>
   </head>
   <body>
     <div id="root"></div>
+    
+   
+    <div class="cursor-dot" style="position: fixed; top: 0; left: 0; width: 6px; height: 6px; background: #D4ED2C; border-radius: 50%; pointer-events: none; z-index: 100000; will-change: transform; transform: translate(-50%, -50%);"></div>
+    <div class="cursor-follower" style="position: fixed; top: 0; left: 0; width: 34px; height: 34px; border: 1.5px solid #D4ED2C; border-radius: 50%; pointer-events: none; z-index: 99999; will-change: transform; transform: translate(-50%, -50%); transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1), height 0.4s cubic-bezier(0.16, 1, 0.3, 1), background 0.4s ease, border-width 0.4s ease;"></div>
+
+    <script type="text/javascript">
+      (function() {
+        const dot = document.querySelector('.cursor-dot');
+        const follower = document.querySelector('.cursor-follower');
+        let mouseX = 0;
+        let mouseY = 0;
+        let followerX = 0;
+        let followerY = 0;
+
+        window.addEventListener('mousemove', (e) => {
+          mouseX = e.clientX;
+          mouseY = e.clientY;
+          // Apply translate(-50%, -50%) via translate3d to keep dot centered on ACTUAL pointer
+          dot.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%)`;
+          document.documentElement.style.setProperty('--mouse-x', mouseX + 'px');
+          document.documentElement.style.setProperty('--mouse-y', mouseY + 'px');
+        });
+
+        function animate() {
+          followerX += (mouseX - followerX) * 0.35;
+          followerY += (mouseY - followerY) * 0.35;
+          // Apply translate(-50%, -50%) to keep follower centered on lerp path
+          follower.style.transform = `translate3d(${followerX}px, ${followerY}px, 0) translate(-50%, -50%)`;
+          requestAnimationFrame(animate);
+        }
+        animate();
+
+        // Global Hover Detection (Fixed with mouseover bubbling)
+        window.addEventListener('mouseover', (e) => {
+          const target = e.target.closest('button, a, .clickable, .kinetic-card, .terminal-card, .tab-btn, .industrial-btn');
+          
+          if (target) {
+            follower.style.width = '60px'; // Further reduced size
+            follower.style.height = '60px';
+            follower.style.background = 'rgba(212, 237, 44, 0.4)'; // Increased transparency (Alpha 0.4)
+            follower.style.boxShadow = '0 0 15px rgba(212, 237, 44, 0.3)'; // Lighter, subtle glow
+            follower.style.borderWidth = '0px';
+            dot.style.opacity = '0';
+          } else {
+            follower.style.width = '34px';
+            follower.style.height = '34px';
+            follower.style.background = 'transparent';
+            follower.style.boxShadow = 'none';
+            follower.style.borderWidth = '1.5px';
+            dot.style.opacity = '1';
+          }
+        });
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

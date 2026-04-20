@@ -18,6 +18,7 @@ interface BarChartProperties {
   rotateLabel?: number;
   yMax?: number;
   yFormatter?: (value: number) => string;
+  onItemClick?: (name: string) => void;
 }
 
 const SEVERITY_COLORS = {
@@ -38,6 +39,7 @@ const BarChart: React.FC<BarChartProperties> = ({
   rotateLabel,
   yMax,
   yFormatter,
+  onItemClick,
 }) => {
   // ── ECOSYSTEM PERSISTENCE ENGINE ──
   const prevLabelsRef = useRef<string[]>([]);
@@ -49,7 +51,7 @@ const BarChart: React.FC<BarChartProperties> = ({
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
-  
+
   const chartConfiguration = useMemo(() => {
     // We track the labels reference to detect when the user has filtered/searched.
     // We ONLY provide startValue on the first render for a given dataset.
@@ -76,21 +78,22 @@ const BarChart: React.FC<BarChartProperties> = ({
     });
 
     return {
+      textStyle: { fontFamily: 'Inter, sans-serif' },
       title: {
         text: title,
         left: "center",
-        textStyle: { fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit' },
+        textStyle: { fontSize: isMobile ? 14 : 16, fontWeight: 700, color: "#F3F4F6", fontFamily: 'Outfit, sans-serif' },
       },
       /* ── SMOOTH ANIMATION ENGINE ── */
       animationEasing: 'cubicOut',
       animationDuration: 1200,
       animationDurationUpdate: 800,
       animationDelay: (idx: number) => idx * 25,
-      tooltip: { 
+      tooltip: {
         trigger: 'axis',
         backgroundColor: 'rgba(15, 23, 42, 0.95)',
         borderColor: 'rgba(255, 255, 255, 0.1)',
-        textStyle: { color: '#fff', fontFamily: 'Inter', fontSize: 13 },
+        textStyle: { color: '#fff', fontFamily: 'Inter, sans-serif', fontSize: 13 },
         borderRadius: 12,
         padding: 16,
         backdropFilter: 'blur(12px)',
@@ -98,9 +101,11 @@ const BarChart: React.FC<BarChartProperties> = ({
           const p = params[0];
           const insightText = insights?.[p.dataIndex];
           const insightHtml = insightText ? `<div style="margin-top: 10px; font-size: 11px; opacity: 0.7; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; white-space: normal; line-height: 1.5; max-width: 240px;">${insightText}</div>` : '';
-          return `<div style="font-weight: 700;">${p.name}</div>
-                  <div style="font-family: 'JetBrains Mono'; margin-top: 4px; color: ${p.color};">${p.value} UNITS</div>
-                  ${insightHtml}`;
+          return `<div style="font-family: 'Inter', sans-serif;">
+                    <div style="font-weight: 700;">${p.name}</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; margin-top: 4px; color: ${p.color};">${p.value} UNITS</div>
+                    ${insightHtml}
+                  </div>`;
         }
       },
       grid: {
@@ -123,7 +128,7 @@ const BarChart: React.FC<BarChartProperties> = ({
           bottom: isMobile ? 10 : 25,
           backgroundColor: "rgba(255, 255, 255, 0.05)",
           fillerColor: "rgba(255, 255, 255, 0.1)",
-          handleSize: 0, 
+          handleSize: 0,
           showDetail: false,
           showDataShadow: false,
           brushSelect: false,
@@ -142,7 +147,7 @@ const BarChart: React.FC<BarChartProperties> = ({
           rotate: isMobile ? 45 : (rotateLabel ?? 30),
           interval: 0,
           color: "#94a3b8",
-          fontFamily: 'Inter',
+          fontFamily: 'Inter, sans-serif',
           fontSize: isMobile ? 9 : 10,
           formatter: (value: string) => value.length > (isMobile ? 10 : 14) ? value.substring(0, (isMobile ? 10 : 14)) + '...' : value
         },
@@ -154,7 +159,7 @@ const BarChart: React.FC<BarChartProperties> = ({
         max: yMax,
         axisLabel: {
           color: "#94a3b8",
-          fontFamily: 'Inter',
+          fontFamily: 'Inter, sans-serif',
           fontSize: isMobile ? 9 : 10,
           formatter: yFormatter,
         },
@@ -186,6 +191,11 @@ const BarChart: React.FC<BarChartProperties> = ({
     <ReactECharts
       option={chartConfiguration}
       style={{ height: isMobile ? 300 : 350, width: "100%" }}
+      onEvents={{
+        'click': (params: any) => {
+          if (onItemClick) onItemClick(params.name);
+        }
+      }}
       notMerge={false}
       lazyUpdate={true}
     />
