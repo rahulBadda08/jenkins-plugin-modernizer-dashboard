@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 
 // We copy the exact same TypeScript definitions to stay safe
 type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
@@ -44,10 +44,8 @@ export default function DataExplorer({
   onPluginSelect, 
   externalSearch, 
   externalMigrationFilter = "ALL",
-  externalPrFilter = "ALL",
   roadmapList, 
-  legacyAlignmentList,
-  onClearExternal 
+  legacyAlignmentList
 }: DataExplorerProps) {
   // ── 1. STATE & RESPONSIVENESS ──
   const [currentPage, setCurrentPage] = useState(1);
@@ -304,10 +302,10 @@ export default function DataExplorer({
                     <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.1)', color: 'var(--accent-amber)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>LEGACY</span>
                   )}
                   <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
-                    {migration.migrationStatus || "UNKNOWN"}
+                    {formatLabel(migration.migrationStatus || "UNKNOWN")}
                   </span>
                   <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
-                    {(migration.pullRequestStatus || 'unknown').replace("_", " ")}
+                    {formatLabel(migration.pullRequestStatus || "UNKNOWN")}
                   </span>
                 </div>
 

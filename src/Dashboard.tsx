@@ -448,8 +448,6 @@ function Dashboard() {
     window.scrollTo(0, 0);
   }, [currentlyActiveTab]);
 
-  const [isHovering, setIsHovering] = useState(false);
-
   // ── V32: NARRATIVE OBSERVER HOOK ──
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
