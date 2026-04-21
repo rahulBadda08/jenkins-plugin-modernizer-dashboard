@@ -5,30 +5,32 @@ interface PieChartProperties {
   data: { name: string; value: number; insight?: string; severity?: string }[];
   title?: string;
   colors?: string[];
+  theme?: 'dark' | 'light';
   onItemClick?: (name: string) => void;
 }
 
 const SEVERITY_COLORS = {
-  danger: "#EF4444",
-  warning: "#F59E0B",
-  success: "#10B981",
-  info: "#3B82F6",
-  default: "#8B5CF6"
+  danger: "#c92a2a",
+  warning: "#e67e22",
+  success: "#2b8a3e",
+  info: "#1864ab",
+  default: "#003056"
 };
 
-const VIBRANT_INFO_PALETTE = [
-  "#8B5CF6", // Violet
-  "#06B6D4", // Cyan
-  "#6366F1", // Indigo
-  "#14B8A6", // Teal
-  "#3B82F6", // Blue
-  "#EC4899", // Pink
+const PROFESSIONAL_PALETTE = [
+  "#003056", // Navy
+  "#007bff", // Blue
+  "#1864ab", // Dark Blue
+  "#adb5bd", // Gray
+  "#6c757d", // Dim Gray
+  "#495057", // Dark Gray
 ];
 
 const PieChart: React.FC<PieChartProperties> = ({
   data,
   title,
   colors: manualColors,
+  theme = 'dark',
   onItemClick
 }) => {
   const chartConfiguration = useMemo(() => {
@@ -48,8 +50,8 @@ const PieChart: React.FC<PieChartProperties> = ({
       if (item.severity === 'danger' || item.severity === 'warning' || item.severity === 'success') {
         finalColor = SEVERITY_COLORS[item.severity as keyof typeof SEVERITY_COLORS];
       } else {
-        // Use vibrant palette for info/default/unknown topics
-        finalColor = VIBRANT_INFO_PALETTE[idx % VIBRANT_INFO_PALETTE.length];
+        // Use professional palette for info/default/unknown topics
+        finalColor = PROFESSIONAL_PALETTE[idx % PROFESSIONAL_PALETTE.length];
       }
 
       return {
@@ -69,22 +71,28 @@ const PieChart: React.FC<PieChartProperties> = ({
         text: title,
         left: "center",
         top: 10,
-        textStyle: { fontSize: 18, fontWeight: 800, color: "#F3F4F6", fontFamily: 'Outfit, sans-serif', letterSpacing: 1 },
+        textStyle: { 
+          fontSize: 18, 
+          fontWeight: 800, 
+          color: theme === 'dark' ? "#F3F4F6" : "#0f172a", 
+          fontFamily: 'Outfit, sans-serif', 
+          letterSpacing: 1 
+        },
       },
       tooltip: {
         trigger: 'item',
-        backgroundColor: "rgba(15, 23, 42, 0.95)",
-        borderColor: "rgba(255,255,255,0.1)",
-        textStyle: { color: "#FFF", fontFamily: 'Inter, sans-serif', fontSize: 13 },
+        backgroundColor: theme === 'dark' ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        borderColor: theme === 'dark' ? "rgba(255,255,255,0.1)" : "rgba(0, 0, 0, 0.1)",
+        textStyle: { color: theme === 'dark' ? "#FFF" : "#0f172a", fontFamily: 'Inter, sans-serif', fontSize: 13 },
         borderRadius: 12,
         padding: 16,
         backdropFilter: 'blur(12px)',
         formatter: (params: any) => {
           const item = data[params.dataIndex];
-          const insight = item.insight ? `<div style="margin-top: 8px; font-size: 11px; opacity: 0.7; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px; white-space: normal; line-height: 1.4; max-width: 220px;">${item.insight}</div>` : '';
+          const insight = item.insight ? `<div style="margin-top: 8px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 8px; white-space: normal; line-height: 1.4; max-width: 220px;">${item.insight}</div>` : '';
           return `<div style="font-family: 'Inter', sans-serif;">
                     <div style="font-weight: 700;">${params.name}</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; margin-top: 4px; color: #10B981;">${params.value} PLUGINS <span style="color: #64748b; font-size: 10px;">(${params.percent}%)</span></div>
+                    <div style="font-family: 'JetBrains Mono', monospace; margin-top: 4px; color: #2b8a3e;">${params.value} ENTITIES <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'}; font-size: 10px;">(${params.percent}%)</span></div>
                     ${insight}
                   </div>`;
         }
@@ -93,7 +101,7 @@ const PieChart: React.FC<PieChartProperties> = ({
         orient: 'horizontal',
         bottom: '0%',
         left: 'center',
-        textStyle: { color: '#94a3b8', fontFamily: 'Inter, sans-serif', fontSize: 11 },
+        textStyle: { color: theme === 'dark' ? '#94a3b8' : '#475569', fontFamily: 'Inter, sans-serif', fontSize: 11 },
         icon: 'circle'
       },
       series: [
@@ -106,7 +114,7 @@ const PieChart: React.FC<PieChartProperties> = ({
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 12,
-            borderColor: 'rgba(3, 7, 18, 1)',
+            borderColor: theme === 'dark' ? 'rgba(3, 7, 18, 1)' : 'rgba(248, 250, 252, 1)',
             borderWidth: 4
           },
           label: { 
@@ -118,14 +126,14 @@ const PieChart: React.FC<PieChartProperties> = ({
                 fontFamily: 'Outfit, sans-serif',
                 fontSize: 12,
                 fontWeight: 700,
-                color: '#F3F4F6',
+                color: theme === 'dark' ? '#F3F4F6' : '#0f172a',
                 padding: [0, 0, 4, 0]
               },
               value: {
                 fontFamily: '"JetBrains Mono", monospace',
                 fontSize: 13,
                 fontWeight: 800,
-                color: '#D4ED2C'
+                color: theme === 'dark' ? '#38d1ff' : '#003056'
               }
             }
           },
@@ -137,7 +145,7 @@ const PieChart: React.FC<PieChartProperties> = ({
             },
             itemStyle: {
               shadowBlur: 25,
-              shadowColor: 'rgba(139, 92, 246, 0.4)'
+              shadowColor: theme === 'dark' ? 'rgba(139, 92, 246, 0.4)' : 'rgba(139, 92, 246, 0.2)'
             }
           },
           labelLine: { 
@@ -146,7 +154,7 @@ const PieChart: React.FC<PieChartProperties> = ({
             length2: 15,
             smooth: true,
             lineStyle: {
-              color: 'rgba(255,255,255,0.4)',
+              color: theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)',
               width: 1.5
             }
           },
@@ -154,7 +162,7 @@ const PieChart: React.FC<PieChartProperties> = ({
         }
       ]
     };
-  }, [data, title, manualColors]);
+  }, [data, title, manualColors, theme]);
 
   return (
     <ReactECharts

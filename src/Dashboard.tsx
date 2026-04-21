@@ -3,11 +3,12 @@ import BarChart from "./components/BarChart";
 import PieChart from "./components/PieChart";
 import DataExplorer from "./components/DataExplorer";
 import allPluginsRaw from "./data/all_plugins.json";
-import { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // --- ASSETS ---
 import architectureImage from "./assets/ARCHITECTURE DIAGRAM (EXPLANATION SECTION) - visual selection.png";
+import automationStackImage from "./assets/automation_stack_blueprint.png";
 
 // ── STRICT TYPESCRIPT DEFINITIONS ──
 type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
@@ -74,10 +75,10 @@ const DIAGNOSTIC_ACTIONS: Record<string, string> = {
 };
 
 // ── V32: KINETIC MARQUEE COMPONENT ──
-const MarqueeHeader: React.FC<{ text: string }> = ({ text }) => {
+const MarqueeHeader: React.FC<{ text: string; style?: React.CSSProperties }> = ({ text, style }) => {
   const items = Array(10).fill(`${text} - SYSTEM INTEGRITY`);
   return (
-    <div className="marquee-wrapper reveal-node">
+    <div className="marquee-wrapper reveal-node" style={style}>
       <div className="marquee-content">
         {items.map((item, idx) => (
           <div key={idx} className="marquee-item">
@@ -96,9 +97,265 @@ const MarqueeHeader: React.FC<{ text: string }> = ({ text }) => {
   );
 };
 
+// ── V49: THE SURGICAL DIRECTIVE ENGINE ──
+const LTS_BASELINE = "2.452.3";
+
+const calculateDrift = (current: string): { gap: number; criticality: 'low' | 'med' | 'critical' } => {
+  const parse = (v: string) => v.split('.').map(p => parseInt(p) || 0);
+  const currentParts = parse(current || "0.0");
+  const baselineParts = parse(LTS_BASELINE);
+
+  // High-level heuristic for version distance (Focusing on the minor part primarily for Jenkins 2.x)
+  const gap = Math.abs((baselineParts[0] * 1000 + baselineParts[1]) - (currentParts[0] * 1000 + currentParts[1]));
+
+  return {
+    gap,
+    criticality: gap > 50 ? 'critical' : (gap > 20 ? 'med' : 'low')
+  };
+};
+
+const getRemediationCommands = (checklist: any[], pluginName: string): string[] => {
+  const commands: string[] = [];
+  const fails = checklist.filter(c => !c.value);
+
+  if (fails.some(f => f.label.includes('BOM'))) {
+    commands.push(`mvn jenkins-plugin-modernizer:modernize -Drecipe=BomAlignment`);
+  }
+  if (fails.some(f => f.label.includes('Parent'))) {
+    commands.push(`mvn versions:update-parent -DparentVersion=5.12`);
+  }
+  if (fails.some(f => f.label.includes('CI'))) {
+    commands.push(`gh workflow run modernization.yml --repo jenkins-plugins/${pluginName}`);
+  }
+  if (fails.some(f => f.label.includes('API'))) {
+    commands.push(`mvn rewrite:run -DactiveRecipes=org.openrewrite.jenkins.ModernizePlugin`);
+  }
+
+  if (commands.length === 0) commands.push("# No immediate technical remediation required. Baseline aligned.");
+  return commands;
+};
+
+// ── V45: STRATEGIC ASSESSMENT ENGINE (CENTRALIZED) ──
+interface PluginInsight {
+  actionInsight: {
+    status: string;
+    severity: 'danger' | 'warning' | 'success';
+    summary: string[];
+    recommendations: string[];
+  };
+  priorities: {
+    severity: { label: string; status: string; color: string };
+    maintenance: { label: string; status: string; color: string };
+    security: { label: string; status: string; color: string };
+  };
+  checklist: Array<{ label: string; value: boolean; description: string }>;
+  issueBreakdown: {
+    deprecated: { label: string; value: boolean; display: string };
+    ci: { label: string; value: boolean; display: string };
+    pr: { label: string; value: boolean; display: string };
+  };
+  surgical: {
+    drift: { gap: number; criticality: string };
+    commands: string[];
+    difficulty: number;
+  };
+}
+
+const getPluginInsight = (plugin: PluginData): PluginInsight => {
+  const migration = plugin.migrations?.[0] || {} as Migration;
+  const checkRuns = migration.checkRuns || {};
+  const checkRunKeys = Object.keys(checkRuns);
+  const status = (migration.migrationStatus || "").toLowerCase();
+  const ver = migration.jenkinsVersion || "0.0";
+  const prStatus = (migration.pullRequestStatus || "unknown").toLowerCase();
+
+  const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 440);
+  const hasSecurityRisk = checkRunKeys.some(k => k.toLowerCase().includes("security")) &&
+    checkRuns[checkRunKeys.find(k => k.toLowerCase().includes("security"))!] !== "success";
+  const hasCiFailure = migration.checkRunsSummary !== "success";
+  const hasNoPR = prStatus === "unknown" || prStatus === "none" || prStatus === "";
+
+  // ── V46: MODERNIZATION CHECKLIST LOGIC ──
+  const checklist = [
+    {
+      label: "BOM Aligned",
+      value: checkRuns['BOM'] === 'success' || checkRuns['Bom'] === 'success',
+      description: "Bill of Materials dependency management"
+    },
+    {
+      label: "Latest Parent POM",
+      value: checkRuns['Parent Pom'] === 'success',
+      description: "Modern Jenkins build configuration"
+    },
+    {
+      label: "CI Configured",
+      value: migration.checkRunsSummary === 'success',
+      description: "Automated verification & passing tests"
+    },
+    {
+      label: "Active Maintenance",
+      value: !hasNoPR,
+      description: "Ongoing pull request and refactor activity"
+    },
+    {
+      label: "Modern APIs",
+      value: checkRuns['Modernizer'] === 'success',
+      description: "Verification of non-deprecated API usage"
+    }
+  ];
+
+  const issueBreakdown = {
+    deprecated: {
+      label: "Deprecated",
+      value: (migration.tags || []).some(t => t.toLowerCase() === 'deprecated'),
+      display: (migration.tags || []).some(t => t.toLowerCase() === 'deprecated') ? "YES" : "NO"
+    },
+    ci: {
+      label: "CI Integrity",
+      value: migration.checkRunsSummary === 'success',
+      display: migration.checkRunsSummary === 'success' ? "CONFIGURED" : "MISSING"
+    },
+    pr: {
+      label: "Maintenance",
+      value: !hasNoPR,
+      display: !hasNoPR ? "ACTIVE" : "NONE"
+    }
+  };
+
+  let actionInsight: PluginInsight['actionInsight'] = {
+    status: "STABLE & ELIGIBLE",
+    severity: "success",
+    summary: [
+      "Modernization Automated → Code base is aligned with current Jenkins standards",
+      "Clear Maintenance Path → Integrated into modernization CI"
+    ],
+    recommendations: ["Monitor for new modernization recipes", "Ecosystem baseline is healthy"]
+  };
+
+  if (status === "fail" || status === "failure" || hasSecurityRisk) {
+    actionInsight = {
+      status: "HIGH RISK / CRITICAL",
+      severity: "danger",
+      summary: [
+        status.includes("fail") ? "Modernization Stalled → Automated tools unable to reconcile code base" : "🚨 Security Integrity Breach → Critical remediation required",
+        hasCiFailure ? "Pipeline Regressions → Core stability checks are failing" : "⚠️ Baseline Misalignment → System integrity at risk"
+      ],
+      recommendations: [
+        "Manual intervention required: Review 'modernizer' logs",
+        "Analyze security findings in repository",
+        "Consider repository adoption or replacement"
+      ]
+    };
+  } else if (isOutdated || status === "aborted" || hasNoPR) {
+    const narratives = [];
+    if (hasNoPR) narratives.push("No active pull requests → No ongoing maintenance detected");
+    if (isOutdated) narratives.push(`Architecturally Obsolete → Version ${ver} is below Ecosystem 2026 baseline`);
+    if (status === "aborted") narratives.push("Build Terminated → Modernization attempt was manually interrupted");
+    if (narratives.length === 0) narratives.push("Moderate risk identified in plugin telemetry");
+
+    actionInsight = {
+      status: "LEGACY / AT RISK",
+      severity: "warning",
+      summary: narratives,
+      recommendations: [
+        "Adopt and modernize repository",
+        "Upgrade Jenkins baseline to >= 2.440.3",
+        "Establish active PR workflow to resume maintenance"
+      ]
+    };
+  }
+
+  const priorities = {
+    severity: {
+      label: "Severity",
+      status: (status === "fail" || status === "failure" || hasSecurityRisk) ? "Critical" : (isOutdated ? "Warning" : "Low"),
+      color: (status === "fail" || status === "failure" || hasSecurityRisk) ? "var(--accent-red)" : (isOutdated ? "var(--accent-amber)" : "var(--accent-neon)")
+    },
+    maintenance: {
+      label: "Maintenance",
+      status: hasNoPR ? "Inactive" : (status.includes("fail") ? "Stalled" : "Active"),
+      color: hasNoPR ? "var(--accent-amber)" : (status.includes("fail") ? "var(--accent-red)" : "var(--accent-neon)")
+    },
+    security: {
+      label: "Security",
+      status: hasSecurityRisk ? "Active Advisory" : "No active advisory",
+      color: hasSecurityRisk ? "var(--accent-red)" : "var(--accent-neon)"
+    }
+  };
+
+  const drift = calculateDrift(ver);
+  const commands = getRemediationCommands(checklist, plugin.pluginName);
+
+  // V49: Complexity Heuristic
+  const failCount = checklist.filter(c => !c.value).length;
+  const intensityFactor = ((migration.additions || 0) + (migration.deletions || 0)) > 1000 ? 2 : 0;
+  const driftFactor = drift.gap > 50 ? 3 : (drift.gap > 20 ? 1 : 0);
+  const difficulty = Math.min(10, 1 + failCount + intensityFactor + driftFactor);
+
+  return { actionInsight, priorities, checklist, issueBreakdown, surgical: { drift, commands, difficulty } };
+};
+
+// ── V48: GLOBAL RANKING ENGINE ──
+const calculateHealthScore = (plugin: PluginData): number => {
+  let score = 100;
+  const migration = plugin.migrations?.[0] || {} as Migration;
+  const checkRuns = migration.checkRuns || {};
+  const ver = migration.jenkinsVersion || "0.0";
+  const prStatus = (migration.pullRequestStatus || "unknown").toLowerCase();
+
+  if (migration.checkRunsSummary !== "success") score -= 25;
+  if ((migration.tags || []).some(t => t.toLowerCase() === 'deprecated')) score -= 20;
+  if (checkRuns['BOM'] !== 'success' && checkRuns['Bom'] !== 'success') score -= 15;
+  if (prStatus === "unknown" || prStatus === "none" || prStatus === "") score -= 15;
+  if (Object.keys(checkRuns).some(k => k.toLowerCase().includes("security") && checkRuns[k] !== "success")) score -= 15;
+  if (ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 440)) score -= 10;
+
+  return Math.max(0, score);
+};
+
 function Dashboard() {
   const allPluginsData = allPluginsRaw as unknown as PluginData[];
+
+  // ── V45: PRE-CALCULATE ALL INSIGHTS ──
+  const allPluginsWithInsights = useMemo(() => {
+    return allPluginsData.map(plugin => ({
+      ...plugin,
+      insight: getPluginInsight(plugin),
+      healthScore: calculateHealthScore(plugin)
+    }));
+  }, [allPluginsData]);
+
+  // ── V48: ECOSYSTEM BENCHMARKING DISTRIBUTION ──
+  const ecosystemRankingDist = useMemo(() => {
+    const scores = allPluginsWithInsights.map(p => p.healthScore).sort((a, b) => a - b);
+    return {
+      scores,
+      getPercentile: (score: number) => {
+        const count = scores.filter(s => s < score).length;
+        return (count / scores.length) * 100;
+      }
+    };
+  }, [allPluginsWithInsights]);
+
   const [currentlyActiveTab, setCurrentlyActiveTab] = useState<string>("Global Overview");
+
+  // ── V50: THE ORCHESTRATION QUEUE STATE ──
+  const [surgeryQueue, setSurgeryQueue] = useState<string[]>([]);
+  const toggleQueueItem = (name: string) => {
+    setSurgeryQueue(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  // ── THEME ENGINE (V40) ──
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    return (localStorage.getItem('jenkins-dashboard-theme') as 'dark' | 'light') || 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('light-mode', theme === 'light');
+    localStorage.setItem('jenkins-dashboard-theme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
   const handleDrillDown = (pluginName: string) => {
     setCurrentlyActiveTab(pluginName);
@@ -132,6 +389,40 @@ function Dashboard() {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ── HOOK: KINETIC MOUSE TRACKER (V42: LERP REFACTOR) ──
+  const targetX = useRef(window.innerWidth / 2);
+  const targetY = useRef(window.innerHeight / 2);
+  const currentX = useRef(window.innerWidth / 2);
+  const currentY = useRef(window.innerHeight / 2);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      targetX.current = e.clientX;
+      targetY.current = e.clientY;
+    };
+
+    let rafId: number;
+    const animate = () => {
+      // LERP: current = current + (target - current) * factor
+      // 0.08 provides an oily, fluid lag that feels high-end
+      currentX.current += (targetX.current - currentX.current) * 0.08;
+      currentY.current += (targetY.current - currentY.current) * 0.08;
+
+      document.documentElement.style.setProperty('--mouse-x', `${currentX.current}px`);
+      document.documentElement.style.setProperty('--mouse-y', `${currentY.current}px`);
+
+      rafId = requestAnimationFrame(animate);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    rafId = requestAnimationFrame(animate);
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // ── HOOK: SCROLL REVEAL ENGINE (V17.3) ──
@@ -216,8 +507,8 @@ function Dashboard() {
   }, []);
 
   const pluginsWithValidMigrationData = useMemo(() =>
-    allPluginsData.filter(plugin => plugin.migrations && plugin.migrations.length > 0),
-    [allPluginsData]
+    allPluginsWithInsights.filter(plugin => plugin.migrations && plugin.migrations.length > 0),
+    [allPluginsWithInsights]
   );
 
   // ── DYNAMIC TOPIC EXTRACTION ──
@@ -233,31 +524,31 @@ function Dashboard() {
   const workbenchMetrics = useMemo(() => {
     // Stage 1: Base Filtered (Static logic for metrics)
     const baseList = pluginsWithValidMigrationData.filter(p => {
-       const migration = p.migrations[0];
-       if (!migration) return false;
-       
-       // Standard hub filters apply here
-       const matchesTopic = topicFilter === "ALL" || (migration.tags || []).includes(topicFilter);
-       const prStatus = (migration.pullRequestStatus || "UNKNOWN").toUpperCase();
-       
-       let finalPrStatus = prStatus;
-       if (finalPrStatus === "DRAFT") finalPrStatus = "UNKNOWN";
-       if (finalPrStatus === "FAILURE") finalPrStatus = "FAIL";
-       const matchesPR = prFilter === "ALL" || finalPrStatus === prFilter.toUpperCase();
-       
-       // Severity Match
-       let matchesSeverity = true;
-       if (severityFilter !== "ALL") {
-         const mStatus = (migration.migrationStatus || "").toLowerCase();
-         const ver = p.migrations[0].jenkinsVersion || "0.0";
-         const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 400);
+      const migration = p.migrations[0];
+      if (!migration) return false;
 
-         if (severityFilter === "CRITICAL") matchesSeverity = mStatus === "fail" || mStatus === "failure";
-         else if (severityFilter === "WARNING") matchesSeverity = isOutdated || mStatus === "aborted";
-         else if (severityFilter === "OPTIMIZED") matchesSeverity = mStatus === "success";
-       }
+      // Standard hub filters apply here
+      const matchesTopic = topicFilter === "ALL" || (migration.tags || []).includes(topicFilter);
+      const prStatus = (migration.pullRequestStatus || "UNKNOWN").toUpperCase();
 
-       return matchesTopic && matchesPR && matchesSeverity;
+      let finalPrStatus = prStatus;
+      if (finalPrStatus === "DRAFT") finalPrStatus = "UNKNOWN";
+      if (finalPrStatus === "FAILURE") finalPrStatus = "FAIL";
+      const matchesPR = prFilter === "ALL" || finalPrStatus === prFilter.toUpperCase();
+
+      // Severity Match
+      let matchesSeverity = true;
+      if (severityFilter !== "ALL") {
+        const mStatus = (migration.migrationStatus || "").toLowerCase();
+        const ver = p.migrations[0].jenkinsVersion || "0.0";
+        const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 400);
+
+        if (severityFilter === "CRITICAL") matchesSeverity = mStatus === "fail" || mStatus === "failure";
+        else if (severityFilter === "WARNING") matchesSeverity = isOutdated || mStatus === "aborted";
+        else if (severityFilter === "OPTIMIZED") matchesSeverity = mStatus === "success";
+      }
+
+      return matchesTopic && matchesPR && matchesSeverity;
     });
 
     const outdatedPlugins = baseList.filter(p => {
@@ -474,6 +765,38 @@ function Dashboard() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  const ecosystemBenchmarks = useMemo(() => {
+    const counts: Record<string, { success: number; total: number }> = {};
+    allPluginsWithInsights.forEach(p => {
+      const migration = p.migrations?.[0];
+      if (!migration || !migration.checkRuns) return;
+      Object.entries(migration.checkRuns).forEach(([k, status]) => {
+        if (!counts[k]) counts[k] = { success: 0, total: 0 };
+        counts[k].total++;
+        if (status === "success") counts[k].success++;
+      });
+    });
+    const result: Record<string, number> = {};
+    Object.entries(counts).forEach(([k, v]) => {
+      result[k] = v.success / v.total;
+    });
+    return result;
+  }, [allPluginsWithInsights]);
+
+  // ── V50: HIGH IMPACT TARGET HEURISTIC ──
+  const highImpactTargets = useMemo(() => {
+    return [...allPluginsWithInsights]
+      .filter(p => !p.insight.issueBreakdown.deprecated.value) // Focus on active plugins for maximum impact
+      .map(p => {
+        const driftFactor = p.insight.surgical.drift.gap;
+        const failFactor = p.insight.checklist.filter(c => !c.value).length * 10;
+        const totalImpact = (driftFactor + failFactor) * (1 + (p.migrations[0].additions + p.migrations[0].deletions) / 5000);
+        return { ...p, impactScore: totalImpact };
+      })
+      .sort((a, b) => b.impactScore - a.impactScore)
+      .slice(0, 5);
+  }, [allPluginsWithInsights]);
+
   const grandTotalAdditions = useMemo(() =>
     filteredEcosystem.reduce((acc, plugin) => acc + (plugin.migrations[0].additions || 0), 0)
     , [filteredEcosystem]);
@@ -486,7 +809,7 @@ function Dashboard() {
     filteredEcosystem.reduce((acc, plugin) => acc + (plugin.migrations[0].changedFiles || 0), 0)
     , [filteredEcosystem]);
 
-  const { topPieData, overviewLabels, overviewData } = useMemo(() => {
+  const { topPieData, overviewLabels, overviewData, integrityLabels, integrityData, integrityInsights } = useMemo(() => {
     const globalTagCounts: Record<string, number> = {};
     filteredEcosystem.forEach(plugin => {
       (plugin.migrations[0].tags || []).forEach(tag => {
@@ -528,16 +851,27 @@ function Dashboard() {
       }))
       .sort((a, b) => b.totalMods - a.totalMods);
 
+    const integrityLabels = Object.keys(ecosystemBenchmarks).map(k => formatLabel(k));
+    const integrityData = Object.values(ecosystemBenchmarks);
+    const integrityInsights = Object.keys(ecosystemBenchmarks).map(k => {
+      const formatted = formatLabel(k);
+      return SEMANTIC_INSIGHTS[formatted]?.insight || SEMANTIC_INSIGHTS["Default"].insight;
+    });
+
     return {
       topPieData: top6,
       overviewLabels: scaled.map(p => p.name),
-      overviewData: scaled.map(p => p.totalMods)
+      overviewData: scaled.map(p => p.totalMods),
+      integrityLabels,
+      integrityData,
+      integrityInsights
     };
-  }, [filteredEcosystem]);
+  }, [filteredEcosystem, ecosystemBenchmarks]);
+
 
   const currentlySelectedPlugin = useMemo(() =>
-    allPluginsData.find((plugin) => plugin.pluginName === currentlyActiveTab),
-    [allPluginsData, currentlyActiveTab]
+    allPluginsWithInsights.find((plugin) => plugin.pluginName === currentlyActiveTab),
+    [allPluginsWithInsights, currentlyActiveTab]
   );
 
   const detailMetrics = useMemo(() => {
@@ -555,9 +889,29 @@ function Dashboard() {
       return status === "success" ? "success" : "danger";
     });
 
+    // ── V45: CONSUME CENTRALIZED DIAGNOSTIC ENGINE ──
+    const { actionInsight, priorities, checklist, issueBreakdown, surgical } = getPluginInsight(currentlySelectedPlugin);
+
+    // V48: Comparative Analytics
+    const myPercentile = ecosystemRankingDist.getPercentile(currentlySelectedPlugin.healthScore as number);
+    const worseThanCount = Math.round(100 - myPercentile);
+    const rankingLabel = worseThanCount > 50 ? `WORSE THAN ${worseThanCount}%` : `ELITE TOP ${Math.max(1, Math.round(myPercentile))}%`;
+    const rankingSeverity = worseThanCount > 70 ? 'danger' : (worseThanCount > 30 ? 'warning' : 'success');
+
     return {
+      actionInsight,
+      priorities,
+      checklist,
+      issueBreakdown,
+      surgical,
+      ranking: {
+        label: rankingLabel,
+        severity: rankingSeverity,
+        percentile: myPercentile
+      },
       healthLabels: checkRunKeys.map(k => formatLabel(k)),
       healthData: checkRunKeys.map(k => migration.checkRuns[k] === "success" ? 1 : 0.3),
+      healthBenchmarks: checkRunKeys.map(k => ecosystemBenchmarks[k] || 0),
       healthInsights,
       healthSeverities,
       changeStats: [migration.additions, migration.deletions, migration.changedFiles],
@@ -593,82 +947,71 @@ function Dashboard() {
 
   const renderCommandBar = () => (
     <div
-      className="glass-card command-hub-card reveal-node dynamic-island"
+      className="glass-card command-hub-card dynamic-island"
       ref={commandBarRef}
       style={{
-        padding: '16px 30px',
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '24px',
-        alignItems: 'center',
         zIndex: 1100, /* V32: Boosted to ensure no overlap with plugin list */
-        margin: '0 auto 60px',
-        width: '100%',
-        maxWidth: '100%',
         position: 'sticky', /* V32: Strategic Elevation */
         top: '20px'
       }}
     >
-      <div style={{ flex: 1.5, minWidth: '280px' }}>
-        <p className="hero-label" style={{ fontSize: '10px', marginBottom: '8px', opacity: 0.5 }}>Identity Search</p>
-        <div style={{ position: 'relative' }}>
+      <div className="command-pill-module">
+        <p className="pill-micro-label">Search Plugins</p>
+        <div className="nested-pill-input">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ opacity: 0.5 }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
           <input
             type="text"
-            placeholder="Filter plugins"
+            placeholder="Search modernization registry..."
             value={globalSearch}
             onChange={(e) => setGlobalSearch(e.target.value)}
-            style={{
-              width: '100%',
-              background: 'rgba(0,0,0,0.3)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: '16px',
-              padding: '14px 20px',
-              color: 'white',
-              fontSize: '14px',
-              outline: 'none',
-              transition: 'all 0.3s'
-            }}
           />
         </div>
       </div>
 
-      {/* 2. RISK SELECTOR */}
-      <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-        <p className="hero-label" style={{ fontSize: '10px', marginBottom: '8px', opacity: 0.5 }}>Risk Severity</p>
+      <div className="command-pill-module" style={{ flex: 1, minWidth: '150px' }}>
+        <p className="pill-micro-label" style={{ paddingLeft: '0' }}>Risk Severity</p>
         <button
           onClick={() => { setIsSeverityOpen(!isSeverityOpen); setIsTopicOpen(false); setIsPROpen(false); }}
           className="tab-btn clickable"
-          style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' }}
+          style={{
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '6px 16px',
+            background: 'var(--input-bg)',
+            border: '1px solid var(--card-border)',
+            borderRadius: '16px',
+            color: 'var(--text-primary)'
+          }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: 'var(--accent-red)' }}>
+            <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: 'var(--accent-red)', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <span className="telemetry-value" style={{ fontSize: '12px' }}>{severityFilter === 'ALL' ? 'All Risks' : formatLabel(severityFilter)}</span>
+              <span className="telemetry-value" style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{severityFilter === 'ALL' ? 'All Risks' : formatLabel(severityFilter)}</span>
             </div>
           </span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         {isSeverityOpen && (
-          <div className="glass-card reveal-node" style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', background: 'rgba(15, 23, 42, 0.98)', backdropFilter: 'blur(40px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1001, boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
+          <div className="opaque-dropdown reveal-node" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, borderRadius: '20px', padding: '8px' }}>
             {[
-              { value: 'ALL', label: 'All Risks', color: '#fff' },
+              { value: 'ALL', label: 'All Risks', color: 'var(--text-primary)' },
               { value: 'CRITICAL', label: 'Fail', color: 'var(--accent-red)' },
               { value: 'WARNING', label: 'Warning', color: 'var(--accent-amber)' },
               { value: 'OPTIMIZED', label: 'Success', color: 'var(--accent-neon)' }
             ].map(opt => (
               <div
                 key={opt.value}
-                onClick={() => { setSeverityFilter(opt.value); setIsSeverityOpen(false); }}
-                className={`cmd-dropdown-item ${severityFilter === opt.value ? 'active' : ''}`}
-                style={{
-                  color: opt.color,
-                  fontWeight: '900',
-                  background: severityFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent',
-                  border: severityFilter === opt.value ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                  zIndex: 1001
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setSeverityFilter(opt.value); 
+                  setIsSeverityOpen(false); 
                 }}
+                className={`cmd-dropdown-item ${severityFilter === opt.value ? 'active' : ''}`}
+                style={{ color: opt.color, fontWeight: '900' }}
               >
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color }}></div>
                 {opt.label}
@@ -678,52 +1021,51 @@ function Dashboard() {
         )}
       </div>
 
+    
       {/* 3. CATEGORY SELECTOR */}
-      <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-        <p className="hero-label" style={{ fontSize: '10px', marginBottom: '8px', opacity: 0.5 }}>Technical Topic</p>
+      <div className="command-pill-module" style={{ flex: 1, minWidth: '150px' }}>
+        <p className="pill-micro-label">Topic Vector</p>
         <button
           onClick={() => { setIsTopicOpen(!isTopicOpen); setIsSeverityOpen(false); setIsPROpen(false); }}
           className="tab-btn clickable"
-          style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' }}
+          style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'var(--input-bg)', border: '1px solid var(--card-border)', borderRadius: '16px', color: 'var(--text-primary)' }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: 'var(--accent-secondary)' }}>
+            <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: 'var(--accent-secondary)', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <span className="telemetry-value" style={{ fontSize: '12px' }}>{topicFilter === 'ALL' ? 'All Categories' : formatLabel(topicFilter)}</span>
+              <span className="telemetry-value" style={{ fontSize: '12px' }}>{topicFilter === 'ALL' ? 'All Topics' : formatLabel(topicFilter)}</span>
             </div>
           </span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         {isTopicOpen && (
-          <div className="glass-card reveal-node" style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', maxHeight: '400px', overflowY: 'auto', background: 'rgba(15, 23, 42, 0.98)', backdropFilter: 'blur(40px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
+          <div className="opaque-dropdown" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, maxHeight: '400px', overflowY: 'auto', borderRadius: '20px', padding: '8px' }}>
             <div
-              onClick={() => { setTopicFilter('ALL'); setIsTopicOpen(false); }}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setTopicFilter('ALL'); 
+                setIsTopicOpen(false); 
+              }}
               className={`cmd-dropdown-item ${topicFilter === 'ALL' ? 'active' : ''}`}
+              style={{ color: 'var(--text-primary)', fontWeight: '900' }}
             >
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff' }}></div>
-              All Categories
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'var(--text-primary)' }}></div>
+              All Topics
             </div>
             {uniqueTopics.map(t => {
               const topicColor = getTopicColor(t);
               return (
                 <div
                   key={t}
-                  onClick={() => { setTopicFilter(t); setIsTopicOpen(false); }}
-                  className="cmd-dropdown-item"
-                  style={{
-                    color: topicColor,
-                    fontWeight: '900',
-                    background: topicFilter === t ? 'rgba(255,255,255,0.05)' : 'transparent',
-                    border: topicFilter === t ? '1px solid rgba(255,255,255,0.1)' : 'none',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px 16px',
-                    borderRadius: '12px',
-                    cursor: 'pointer'
+                  onClick={(e) => { 
+                    e.stopPropagation(); 
+                    setTopicFilter(t); 
+                    setIsTopicOpen(false); 
                   }}
+                  className={`cmd-dropdown-item ${topicFilter === t ? 'active' : ''}`}
+                  style={{ color: topicColor, fontWeight: '900' }}
                 >
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: topicColor, flexShrink: 0 }}></div>
                   <span>{formatLabel(t)}</span>
@@ -733,29 +1075,39 @@ function Dashboard() {
           </div>
         )}
       </div>
-
-      {/* 4. PR LIFECYCLE SELECTOR */}
-      <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
-        <p className="hero-label" style={{ fontSize: '10px', marginBottom: '8px', opacity: 0.5 }}>PR Lifecycle</p>
+    
+      {/* 4. PRESENT ACTIVITY SELECTOR */}
+      <div className="command-pill-module" style={{ flex: 1, minWidth: '150px' }}>
+        <p className="pill-micro-label">Present Activity</p>
         <button
           onClick={() => { setIsPROpen(!isPROpen); setIsSeverityOpen(false); setIsTopicOpen(false); }}
           className="tab-btn clickable"
-          style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px' }}
+          style={{ 
+            width: '100%', 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            padding: '6px 16px', 
+            background: 'var(--input-bg)', 
+            border: '1px solid var(--card-border)', 
+            borderRadius: '16px', 
+            color: 'var(--text-primary)' 
+          }}
         >
           <span style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: '#60A5FA' }}>
+            <div className="telemetry-icon-box" style={{ width: '28px', height: '28px', marginBottom: 0, color: 'var(--accent-secondary)', background: 'rgba(0,0,0,0.25)', border: '1px solid rgba(255,255,255,0.1)' }}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-              <span className="telemetry-value" style={{ fontSize: '12px' }}>{prFilter === 'ALL' ? 'All Stages' : formatLabel(prFilter)}</span>
+              <span className="telemetry-value" style={{ fontSize: '12px' }}>{prFilter === 'ALL' ? 'All Activity' : formatLabel(prFilter)}</span>
             </div>
           </span>
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         {isPROpen && (
-          <div className="glass-card reveal-node" style={{ position: 'absolute', top: '100%', marginTop: '12px', width: '100%', background: 'rgba(15, 23, 42, 0.98)', backdropFilter: 'blur(40px)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '20px', padding: '8px', zIndex: 1000, boxShadow: '0 20px 50px rgba(0,0,0,0.8)' }}>
+          <div className="opaque-dropdown" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, borderRadius: '20px', padding: '8px' }}>
             {[
-              { value: 'ALL', label: 'All Stages', color: '#fff' },
+              { value: 'ALL', label: 'All Activity', color: 'var(--text-primary)' },
               { value: 'MERGED', label: 'Merged', color: '#FF007F' },
               { value: 'OPEN', label: 'Open', color: '#00FFFF' },
               { value: 'CLOSED', label: 'Closed', color: 'var(--accent-red)' },
@@ -763,14 +1115,13 @@ function Dashboard() {
             ].map(opt => (
               <div
                 key={opt.value}
-                onClick={() => { setPrFilter(opt.value); setIsPROpen(false); }}
-                className={`cmd-dropdown-item ${prFilter === opt.value ? 'active' : ''}`}
-                style={{
-                  color: opt.color,
-                  fontWeight: '900',
-                  background: prFilter === opt.value ? 'rgba(255,255,255,0.05)' : 'transparent',
-                  border: prFilter === opt.value ? '1px solid rgba(255,255,255,0.1)' : 'none'
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  setPrFilter(opt.value); 
+                  setIsPROpen(false); 
                 }}
+                className={`cmd-dropdown-item ${prFilter === opt.value ? 'active' : ''}`}
+                style={{ color: opt.color, fontWeight: '900' }}
               >
                 <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color }}></div>
                 {opt.label}
@@ -780,108 +1131,123 @@ function Dashboard() {
         )}
       </div>
 
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '24px' }}>
-        <div style={{ textAlign: 'right' }}>
-          <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', opacity: 0.6, letterSpacing: '1px' }}>ECOSYSTEM_COVERAGE</div>
-          <div className="mono" style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent-neon)' }}>
-            {Math.round((filteredEcosystem.length / allPluginsData.length) * 100)}%
+      <div className="command-hub-right-group" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+          <div style={{ textAlign: 'right' }}>
+            <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', opacity: 0.6, letterSpacing: '1px' }}>ECOSYSTEM_COVERAGE</div>
+            <div className="mono" style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent-neon)' }}>
+              {Math.round((filteredEcosystem.length / allPluginsData.length) * 100)}%
+            </div>
           </div>
-        </div>
-        
-        <div style={{ height: '30px', width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
 
-        <button 
-          onClick={handleSystemSweep}
-          className={`tab-btn clickable ${isScanning ? 'active' : ''}`}
-          style={{ 
-            padding: '12px', 
-            borderRadius: '14px', 
-            background: isScanning ? 'var(--accent-primary)' : 'rgba(255,255,255,0.05)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-            minWidth: '44px',
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-          title="System Sweep (Refresh Data Visuals)"
-        >
-          <svg 
-            width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" 
-            style={{ 
-              animation: isScanning ? 'spin 1s linear infinite' : 'none',
-              opacity: isScanning ? 1 : 0.7
+          {/* Cinematic Theme Switcher (V40) */}
+          <button
+            onClick={toggleTheme}
+            className="tab-btn clickable"
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(var(--text-primary-rgb), 0.05)',
+              border: '1px solid var(--card-border)',
+              color: 'var(--text-primary)',
+              transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              cursor: 'none'
             }}
+            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           >
-            <path d="M23 4v6h-6" />
-            <path d="M1 20v-6h6" />
-            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-          </svg>
-          {isScanning && <div className="scan-line" />}
-        </button>
+            {theme === 'dark' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" /></svg>
+            )}
+          </button>
+        </div>
       </div>
     </div>
-  );
+);
 
   // ── ROUTING ENGINE ──
   const renderMainContent = () => {
     if (currentlyActiveTab === "Global Overview") {
       return (
-        <div className="tab-content" key="global" style={{ display: 'flex', flexDirection: 'column', gap: '60px' }}>
+        <div className="tab-content" key="global" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
-          {/* 🥇 TIER 1: EXECUTIVE HUB */}
+          {/* 🥇 TIER 1: ECOSYSTEM HEALTH */}
 
-          <MarqueeHeader text="EXECUTIVE SUMMARY" />
-          <div className="executive-hero-grid" style={{ transformStyle: 'preserve-3d', perspective: '1000px' }}>
-            <div ref={heroCard1Ref} className="hero-card info kinetic-card tier-1 in-view liquid-glass">
+          <MarqueeHeader text="ECOSYSTEM HEALTH REPORT" />
+          <div className="executive-hero-grid" style={{ perspective: '1200px' }}>
+            <div ref={heroCard1Ref} className="glass-card hero-card info kinetic-card liquid-glass tier-1 in-view">
               <div className="kinetic-text">
-                <span className="hero-label">Registry Segment</span>
+                <span className="hero-label truncate-text">Indexed Plugins</span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                   <span className="hero-value mono">{workbenchMetrics.filteredCount}</span>
-                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[ENTITIES]</span>
+                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[TOTAL]</span>
                 </div>
-                <p className="hero-desc">Entities matching current command filters in the modernization index.</p>
+                <p className="hero-desc">Total plugins currently tracked in the modernization registry.</p>
               </div>
             </div>
 
-            <div ref={heroCard2Ref} className="hero-card risk-glow kinetic-card tier-2 in-view liquid-glass" onClick={activateLegacyView} style={{ cursor: 'pointer' }}>
+            <div ref={heroCard2Ref} className="glass-card hero-card risk-glow kinetic-card liquid-glass tier-2 in-view" onClick={activateLegacyView} style={{ cursor: 'pointer' }}>
               <div className="kinetic-text">
-                <span className="hero-label">Legacy Core Alignment</span>
+                <span className="hero-label truncate-text">Modern Alignment Gap</span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                   <span className="hero-value mono">{workbenchMetrics.legacyAlignmentPercentage}%</span>
-                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[COMPLIANCE_GAP]</span>
+                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[LEGACY_CORE]</span>
                 </div>
-                <p className="hero-desc">Entities requiring alignment with modern Jenkins baselines (&gt; 2.400).</p>
+                <p className="hero-desc">Percentage of plugins requiring baseline upgrades ( &gt; 2.440).</p>
               </div>
             </div>
 
-            <div ref={heroCard3Ref} className="hero-card success-glow kinetic-card tier-3 in-view liquid-glass">
+            <div ref={heroCard3Ref} className="glass-card hero-card success-glow kinetic-card liquid-glass tier-3 in-view">
               <div className="kinetic-text">
-                <span className="hero-label">Success Rate</span>
+                <span className="hero-label">Modernization Success</span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
                   <span className="hero-value mono">{workbenchMetrics.modernizedPercentage}%</span>
-                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[SUCCESS_INDEX]</span>
+                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[ALIGNED]</span>
                 </div>
-                <p className="hero-desc">Percentage of ecosystem successfully migrated to modern standards.</p>
+                <p className="hero-desc">Percentage of the ecosystem meeting modern development standards.</p>
               </div>
             </div>
           </div>
 
-          {/* 🥈 TIER 2: ANALYTICAL BREAKDOWN (CHARTS) */}
-          <div ref={chartRef} className="charts-grid kinetic-card animate-delay-4" style={{ marginTop: '0px' }}>
+
+          {/* 🥈 TIER 2: ANALYTICAL BREAKDOWN (GLOBAL CHARTS) */}
+          <div className="charts-grid reveal-node animate-delay-4" style={{ marginTop: '0px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
+            <div className="glass-card chart-card">
+              <PieChart
+                data={topPieData}
+                title="Sector Distribution - Modernization Focus"
+                theme={theme}
+              />
+            </div>
+            <div className="glass-card chart-card">
+              <BarChart
+                labels={integrityLabels}
+                data={integrityData}
+                insights={integrityInsights}
+                colors={new Array(integrityData.length).fill('#10B981')}
+                title="Global Integrity Index - Check-Run Success"
+                theme={theme}
+                yMax={1}
+              />
+            </div>
+          </div>
+
+          <div className="charts-grid reveal-node animate-delay-5" style={{ marginTop: '30px' }}>
             <div className="glass-card chart-card chart-full">
-              <div className="kinetic-text">
-                <BarChart
-                  labels={overviewLabels}
-                  data={overviewData}
-                  colors={undefined}
-                  title="Code Mutation Intensity"
-                  rotateLabel={30}
-                  onItemClick={handleDrillDown}
-                />
-              </div>
+              <BarChart
+                labels={overviewLabels}
+                data={overviewData}
+                colors={new Array(overviewData.length).fill('#F59E0B')}
+                title="Modernization Intensity - Ecosystem Volatility"
+                theme={theme}
+                rotateLabel={45}
+                onItemClick={handleDrillDown}
+              />
             </div>
           </div>
 
@@ -896,7 +1262,7 @@ function Dashboard() {
             </div>
 
             <div className="hub-grid">
-              <div ref={hubCard1Ref} className="hub-card risk clickable kinetic-card animate-delay-1" onClick={activateLegacyView}>
+              <div ref={hubCard1Ref} className="glass-card hub-card risk clickable kinetic-card liquid-glass animate-delay-1" onClick={activateLegacyView}>
                 <div className="kinetic-text">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span className="hub-card-label">Legacy Core Alignment</span>
@@ -907,7 +1273,7 @@ function Dashboard() {
                 </div>
               </div>
 
-              <div ref={hubCard2Ref} className="hub-card risk kinetic-card animate-delay-2">
+              <div ref={hubCard2Ref} className="glass-card hub-card risk kinetic-card liquid-glass animate-delay-2">
                 <div className="kinetic-text">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span className="hub-card-label">Primary Risk Vector</span>
@@ -918,7 +1284,7 @@ function Dashboard() {
                 </div>
               </div>
 
-              <div ref={hubCard3Ref} className="hub-card roadmap clickable kinetic-card animate-delay-3" onClick={activateRoadmap}>
+              <div ref={hubCard3Ref} className="glass-card hub-card roadmap clickable kinetic-card liquid-glass animate-delay-3" onClick={activateRoadmap}>
                 <div className="kinetic-text">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span className="hub-card-label">Priority Roadmap</span>
@@ -934,10 +1300,10 @@ function Dashboard() {
 
 
           {/* 🥉 TIER 3: MUTATION ANALYTICS HUD */}
-          <div ref={hudRef} className="mutation-hud kinetic-card animate-delay-5">
+          <div ref={hudRef} className="mutation-hud animate-delay-5 in-view">
 
             {/* 1. CODE CHURN & IMPACT */}
-            <div className="hud-module liquid-glass">
+            <div className="glass-card hud-module liquid-glass">
               <div className="kinetic-text">
                 <div className="hud-label">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
@@ -990,7 +1356,7 @@ function Dashboard() {
             </div>
 
             {/* 3. REGISTRY COVERAGE */}
-            <div className="hud-module liquid-glass">
+            <div className="glass-card hud-module liquid-glass">
               <div className="kinetic-text">
                 <div className="hud-label">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
@@ -1006,30 +1372,6 @@ function Dashboard() {
       );
     }
 
-    if (currentlyActiveTab === "Topic Dashboards") {
-      return (
-        <div className="tab-content" key="topics">
-          <div className="hero-card chart-heavy reveal-node">
-            <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-              <h2 className="title mb-4" style={{ fontSize: '28px', color: 'var(--text-primary)' }}>Ecosystem Modernization <span style={{ color: 'var(--accent-primary)' }}>Topic Vectors</span></h2>
-              <p className="mb-8" style={{ color: 'rgba(255,255,255,0.6)', fontSize: '15px', maxWidth: '600px', margin: '0 auto', lineHeight: '1.6' }}>Distribution of OpenRewrite tags mapping the specific focus of plugin modernizations (e.g. Parent POM, BOM, JSR-305).</p>
-            </div>
-            {topPieData.length > 0 ? (
-              <PieChart
-                data={topPieData}
-                title="Plugin Topic Aggregation"
-                onItemClick={(topic) => {
-                  setGlobalSearch(topic);
-                  setCurrentlyActiveTab("Strategic Workbench");
-                }}
-              />
-            ) : (
-              <div style={{ color: "#9CA3AF", textAlign: "center", padding: "40px" }}>No topic tags found in dataset.</div>
-            )}
-          </div>
-        </div>
-      );
-    }
 
 
     if (currentlyActiveTab === "Data Explorer") {
@@ -1067,113 +1409,305 @@ function Dashboard() {
             <div style={{ textAlign: 'center' }}>
               <p style={{ color: 'var(--text-secondary)', fontSize: '12px', letterSpacing: '2px', marginBottom: '4px' }}>PLUG-IN DIAGNOSTICS</p>
               <h2 className="title">
-                <span className="plugin-name">{currentlySelectedPlugin.pluginName}</span>
+                <span className="plugin-name truncate-text" style={{ maxWidth: '100%', margin: '0 auto' }}>{currentlySelectedPlugin.pluginName}</span>
               </h2>
             </div>
 
-            <a
-              href={currentlySelectedPlugin.pluginRepository}
-              target="_blank"
-              rel="noreferrer"
-              className="tab-btn active"
-            >
-              Source Code
-            </a>
-          </div>
-
-          <div className="summary-grid" style={{ marginBottom: '40px' }}>
-            <div className="telemetry-module reveal-node animate-delay-1">
-              <div className="telemetry-icon-box">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-              </div>
-              <span className="telemetry-label">Active Recipe</span>
-              <span className="telemetry-value mono">{migrationData.migrationName}</span>
-            </div>
-
-            <div className="telemetry-module reveal-node animate-delay-2">
-              <div className="telemetry-icon-box" style={{ color: migrationData.migrationStatus === 'SUCCESS' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-              </div>
-              <span className="telemetry-label">Migration Status</span>
-              <span className={`badge badge-${(migrationData.migrationStatus || "unknown").toLowerCase()}`}>
-                {formatLabel(migrationData.migrationStatus || "unknown")}
-              </span>
-            </div>
-
-            <div className="telemetry-module reveal-node animate-delay-3">
-              <div className="telemetry-icon-box">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
-              </div>
-              <span className="telemetry-label">Pull Request</span>
-              <span className={`badge badge-${(migrationData.pullRequestStatus || "unknown").toLowerCase()}`}>
-                {formatLabel(migrationData.pullRequestStatus || "unknown")}
-              </span>
-            </div>
-
-            <div className="telemetry-module reveal-node animate-delay-4">
-              <div className="telemetry-icon-box">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
-              </div>
-              <span className="telemetry-label">Entity Version</span>
-              <span className="telemetry-value mono">{migrationData.pluginVersion || "N/A"}</span>
-            </div>
-
-            <div className="telemetry-module reveal-node animate-delay-5" style={{ gridColumn: 'span 2' }}>
-              <div className="telemetry-icon-box">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
-              </div>
-              <span className="telemetry-label">Modernization Topics</span>
-              <div className="tag-hud mono" style={{ marginTop: '4px' }}>
-                {(migrationData.tags || []).map((tag) => (
-                  <span key={tag} className="tag-node">{tag}</span>
-                ))}
-              </div>
+            <div className="a-button-group" style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => toggleQueueItem(currentlySelectedPlugin.pluginName)}
+                className={`tab-btn ${surgeryQueue.includes(currentlySelectedPlugin.pluginName) ? 'active' : ''}`}
+                style={{ fontSize: '11px' }}
+              >
+                {surgeryQueue.includes(currentlySelectedPlugin.pluginName) ? '✓ IN SURGERY QUEUE' : '+ ADD TO QUEUE'}
+              </button>
             </div>
           </div>
 
-          <div className="charts-grid" style={{ marginBottom: '40px' }}>
-            <div className="glass-card chart-card reveal-node" style={{ '--delay': '400ms' } as React.CSSProperties}>
-              <BarChart
-                labels={detailMetrics.healthLabels}
-                data={detailMetrics.healthData}
-                insights={detailMetrics.healthInsights}
-                severities={detailMetrics.healthSeverities}
-                yMax={1}
-                title="Ecosystem Health Checks"
-              />
-            </div>
+          {/* ── V43: STRATEGIC ACTION PANEL (NARRATIVE COMMAND CENTER) ── */}
+          <div className={`action-panel ${detailMetrics.actionInsight.severity} reveal-node`}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="action-status-badge">
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 12px currentColor' }}></div>
+                  {detailMetrics.actionInsight.status}
+                </div>
+                <h3 className="action-header">Strategic Assessment</h3>
+              </div>
 
-            <div className="glass-card reveal-node" style={{ '--delay': '500ms', padding: '24px' } as React.CSSProperties}>
-              <h3 className="mono" style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px', textTransform: 'uppercase' }}>Surgical Action Plan</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {detailMetrics.surgicalPlan.length > 0 ? detailMetrics.surgicalPlan.map((step, idx) => (
-                  <div key={idx} className="glass-card" style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)' }}>
-                    <div className="mono" style={{ fontSize: '11px', color: 'var(--accent-secondary)', marginBottom: '4px' }}>STEP_0{idx + 1} // {step.task}</div>
-                    <div style={{ fontSize: '13px', color: '#F3F4F6', lineHeight: '1.4' }}>{step.action}</div>
-                  </div>
-                )) : (
-                  <div className="glass-card success" style={{ padding: '20px', textAlign: 'center' }}>
-                    <div className="mono" style={{ color: 'var(--accent-green)', fontWeight: '700' }}>STATUS: OPTIMIZED</div>
-                    <div style={{ fontSize: '12px', marginTop: '4px', opacity: 0.7 }}>No immediate surgical intervention required.</div>
+              {/* V43: Risk Indicator Meter */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+                <div className={`drift-badge ${detailMetrics.surgical.drift.criticality}`}>
+                  {detailMetrics.surgical.drift.gap} VERSION_DRIFT
+                </div>
+                {detailMetrics.actionInsight.severity === 'danger' && (
+                  <div className="telemetry-module danger" style={{ padding: '8px 16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px' }}>
+                    <span className="mono" style={{ fontSize: '10px', color: '#EF4444', fontWeight: 800 }}>CRITICAL_BLOCKER_DETECTED</span>
                   </div>
                 )}
               </div>
             </div>
+
+            {/* V44: Strategic Priority HUD */}
+            <div className="priority-hud">
+              {Object.entries(detailMetrics.priorities).map(([key, p]) => (
+                <div key={key} className="priority-badge">
+                  <div
+                    className="priority-indicator"
+                    style={{
+                      background: p.color,
+                      boxShadow: `0 0 10px ${p.color}, 0 0 5px ${p.color}`
+                    }}
+                  ></div>
+                  <span className="priority-label">{p.label}:</span>
+                  <span className="priority-status" style={{ color: p.color }}>{p.status}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* V47: BRUTAL TRUTH ISSUE BREAKDOWN HUD */}
+            <div className="issue-breakdown-hud">
+              <div className={`issue-card ${detailMetrics.issueBreakdown.deprecated.value ? 'danger' : 'success'}`}>
+                <div className="issue-label">{detailMetrics.issueBreakdown.deprecated.label}</div>
+                <div className="issue-value">
+                  {detailMetrics.issueBreakdown.deprecated.value ? (
+                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> YES</>
+                  ) : (
+                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg> NO</>
+                  )}
+                </div>
+              </div>
+              <div className={`issue-card ${detailMetrics.issueBreakdown.ci.value ? 'success' : 'danger'}`}>
+                <div className="issue-label">{detailMetrics.issueBreakdown.ci.label}</div>
+                <div className="issue-value">
+                  {!detailMetrics.issueBreakdown.ci.value ? (
+                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> MISSING</>
+                  ) : (
+                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg> CONFIGURED</>
+                  )}
+                </div>
+              </div>
+              <div className={`issue-card ${detailMetrics.issueBreakdown.pr.value ? 'success' : 'danger'}`}>
+                <div className="issue-label">{detailMetrics.issueBreakdown.pr.label}</div>
+                <div className="issue-value">
+                  {!detailMetrics.issueBreakdown.pr.value ? (
+                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> NONE</>
+                  ) : (
+                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg> ACTIVE</>
+                  )}
+                </div>
+              </div>
+              <div className={`issue-card ${detailMetrics.ranking.severity}`}>
+                <div className="issue-label">Ecosystem Rank</div>
+                <div className="issue-value" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
+                  {detailMetrics.ranking.label}
+                </div>
+              </div>
+            </div>
+
+            {/* V46: Modernization Checklist HUD */}
+            <div className="modernization-checklist">
+              <div className="checklist-header">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
+                MODERNIZATION_CHECKLIST - ECOSYSTEM_ALIGNMENT
+              </div>
+              <div className="checklist-grid">
+                {detailMetrics.checklist.map((item, idx) => (
+                  <div key={idx} className={`checklist-item ${item.value ? 'success' : 'failure'}`}>
+                    <div className="item-main">
+                      <div className="status-marker">
+                        {item.value ? (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
+                        ) : (
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                        )}
+                      </div>
+                      <div className="item-info">
+                        <span className="item-label">{item.label}</span>
+                        <span className="item-desc">{item.description}</span>
+                      </div>
+                    </div>
+                    <div className="item-state">{item.value ? 'ALIGNED' : 'MISSING'}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="surgical-terminal">
+              <div className="terminal-header">
+                <div className="terminal-title">SURGICAL_INTERVENTION_TERMINAL - REMEDIATION_SCRIPTS</div>
+                <div className="complexity-info" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span className="mono" style={{ fontSize: '9px', opacity: 0.5 }}>COMPLEXITY: {detailMetrics.surgical.difficulty}/10</span>
+                  <div className="complexity-meter" style={{ width: '80px', marginTop: 0 }}>
+                    <div
+                      className={`complexity-bar ${detailMetrics.surgical.difficulty > 7 ? 'high' : (detailMetrics.surgical.difficulty > 3 ? 'med' : 'low')}`}
+                      style={{ width: `${detailMetrics.surgical.difficulty * 10}%` }}
+                    ></div>
+                  </div>
+                </div>
+              </div>
+              <div className="terminal-content">
+                {detailMetrics.surgical.commands.map((cmd, idx) => (
+                  <div key={idx} className={`terminal-line ${cmd.startsWith('#') ? '' : 'cmd'}`}>
+                    {cmd}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 🥉 V50: CONTRIBUTION DIRECTIVE (GUIDED ACTION) */}
+            <div className="contribution-hub reveal-node animate-delay-2" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px' }}>
+                <div>
+                  <h4 className="mono" style={{ color: 'var(--accent-neon)', fontSize: '12px', letterSpacing: '2px', marginBottom: '8px' }}>CONTRIBUTION // DIRECTIVES</h4>
+                  <h3 className="title" style={{ fontSize: '24px' }}>Execute Modernization</h3>
+                </div>
+                <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }} className="mono">GUIDED_REMEDIATION_PATHWAY</div>
+              </div>
+
+              <div className="action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+                <a href={currentlySelectedPlugin.pluginRepository} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
+                  <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_01]</div>
+                  <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Analyze Codebase</h5>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Inspect source files and technical debt in the primary repository.</p>
+                  <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>Visit GitHub Repository →</div>
+                </a>
+
+                <a href={`${currentlySelectedPlugin.pluginRepository}/issues`} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
+                  <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_02]</div>
+                  <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Survey Issues</h5>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Check for existing modernization blockers or security advisories.</p>
+                  <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>View Open Issues →</div>
+                </a>
+
+                <a href={`${currentlySelectedPlugin.pluginRepository}/compare`} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none', borderLeft: '3px solid var(--accent-neon)' }}>
+                  <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-neon)', marginBottom: '8px' }}>[STEP_03]</div>
+                  <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Initiate Surgery</h5>
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Create a modernization pull request based on terminal insights.</p>
+                  <div className="link-btn" style={{ color: 'var(--accent-neon)', fontWeight: 800, fontSize: '11px' }}>Create Modernization PR →</div>
+                </a>
+              </div>
+            </div>
+
+            {/* 🥉 TIER 2: ANALYTICAL & REMEDIATION DIRECTIVES */}
+            <div className="action-grid" style={{ marginTop: '20px' }}>
+              <div className="action-column">
+                <h4 style={{ marginBottom: '20px' }}>EXECUTIVE_SUMMARY // THE CONTEXT</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {detailMetrics.actionInsight.summary.map((narrative, i) => (
+                    <div key={i} className="glass-card revelation-card" style={{
+                      padding: '24px',
+                      background: 'rgba(var(--text-primary-rgb), 0.03)',
+                      border: '1px solid var(--card-border)',
+                      borderRadius: '20px',
+                      position: 'relative'
+                    }}>
+                      <div style={{
+                        fontSize: '18px',
+                        fontWeight: 700,
+                        lineHeight: '1.4',
+                        color: 'var(--text-primary)',
+                        marginBottom: '8px'
+                      }}>
+                        {narrative}
+                      </div>
+                      <div className="mono" style={{ fontSize: '10px', opacity: 0.5, letterSpacing: '1px' }}>
+                        TELEMETRY_CODE: {detailMetrics.actionInsight.status.replace(/ /g, '_')}_INSIGHT_0{i + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="action-column">
+                <h4>STRATEGIC_DIRECTIVES // EXECUTION PLAN</h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {detailMetrics.surgicalPlan.length > 0 ? detailMetrics.surgicalPlan.map((step, idx) => (
+                    <div key={idx} className="recommendation-card" style={{ padding: '20px', borderLeft: '3px solid var(--accent-secondary)' }}>
+                      <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px', fontWeight: 800 }}>DIRECTIVE_0{idx + 1} // {step.task.toUpperCase()}</div>
+                      <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{step.action}</div>
+                    </div>
+                  )) : (
+                    <div className="glass-card success" style={{ padding: '24px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
+                      <div className="mono" style={{ color: 'var(--accent-green)', fontWeight: '900', fontSize: '12px', letterSpacing: '1px' }}>SYSTEM_STATUS: OPTIMIZED</div>
+                      <div style={{ fontSize: '13px', marginTop: '6px', color: 'var(--text-primary)', opacity: 0.7 }}>No immediate strategic intervention required.</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="glass-card reveal-node" style={{ '--delay': '600ms', padding: '24px' } as React.CSSProperties}>
-            <h3 className="mono" style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px', textTransform: 'uppercase' }}>Diagnostic Findings</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-              {detailMetrics.findings.length > 0 ? detailMetrics.findings.map((f, idx) => (
-                <div key={idx} style={{ padding: '16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
-                  <div className="mono" style={{ color: '#EF4444', fontSize: '11px', fontWeight: '800', marginBottom: '4px' }}>FINDING: {f.issue.toUpperCase()}</div>
-                  <div style={{ fontSize: '13px', opacity: 0.8 }}>{f.recommendation}</div>
+          <div style={{ marginTop: '60px' }}>
+            <h3 className="mono" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '30px', letterSpacing: '3px', textAlign: 'center' }}>🥉 TIER 3: TECHNICAL TELEMETRY & EVIDENCE</h3>
+
+            {/* 🥉 TIER 3: SUPPORTING TELEMETRY GRID */}
+            <div className="summary-grid" style={{ marginBottom: '40px' }}>
+              <div className="telemetry-module reveal-node animate-delay-1">
+                <div className="telemetry-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
                 </div>
-              )) : (
-                <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#64748b' }}>
-                  Systems scan complete. Zero critical diagnostic blockers found.
+                <span className="telemetry-label">Active Recipe</span>
+                <span className="telemetry-value mono">{migrationData.migrationName}</span>
+              </div>
+
+              <div className="telemetry-module reveal-node animate-delay-2">
+                <div className="telemetry-icon-box" style={{ color: migrationData.migrationStatus === 'SUCCESS' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
                 </div>
-              )}
+                <span className="telemetry-label">Migration Status</span>
+                <span className={`badge badge-${(migrationData.migrationStatus || "unknown").toLowerCase()}`}>
+                  {formatLabel(migrationData.migrationStatus || "unknown")}
+                </span>
+              </div>
+
+              <div className="telemetry-module reveal-node animate-delay-3">
+                <div className="telemetry-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
+                </div>
+                <span className="telemetry-label">Pull Request</span>
+                <span className={`badge badge-${(migrationData.pullRequestStatus || "unknown").toLowerCase()}`}>
+                  {formatLabel(migrationData.pullRequestStatus || "unknown")}
+                </span>
+              </div>
+
+              <div className="telemetry-module reveal-node animate-delay-4">
+                <div className="telemetry-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
+                </div>
+                <span className="telemetry-label">Entity Version</span>
+                <span className="telemetry-value mono">{migrationData.pluginVersion || "N/A"}</span>
+              </div>
+
+              <div className="telemetry-module reveal-node animate-delay-5" style={{ gridColumn: 'span 2' }}>
+                <div className="telemetry-icon-box">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
+                </div>
+                <span className="telemetry-label">Modernization Topics</span>
+                <div className="tag-hud mono" style={{ marginTop: '4px' }}>
+                  {(migrationData.tags || []).map((tag) => (
+                    <span key={tag} className="tag-node">{tag}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* 🥉 TIER 3: TECHNICAL EVIDENCE (CHARTS REMOVED PER DIRECTIVE) */}
+
+            <div className="glass-card liquid-glass reveal-node" style={{ '--delay': '600ms', padding: '24px' } as React.CSSProperties}>
+              <h3 className="mono" style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px', textTransform: 'uppercase' }}>Diagnostic Findings</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                {detailMetrics.findings.length > 0 ? detailMetrics.findings.map((f, idx) => (
+                  <div key={idx} style={{ padding: '16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
+                    <div className="mono" style={{ color: '#EF4444', fontSize: '11px', fontWeight: '800', marginBottom: '4px' }}>FINDING: {f.issue.toUpperCase()}</div>
+                    <div style={{ fontSize: '13px', opacity: 0.8 }}>{f.recommendation}</div>
+                  </div>
+                )) : (
+                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#64748b' }}>
+                    Systems scan complete. Zero critical diagnostic blockers found.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1204,9 +1738,10 @@ function Dashboard() {
 
             <div className="task-grid">
               {paginatedQueue.map((pluginName) => {
-                const pData = allPluginsData.find(p => p.pluginName === pluginName);
+                const pData = allPluginsWithInsights.find(p => p.pluginName === pluginName);
                 const rawStatus = (pData?.migrations[0]?.migrationStatus || "UNKNOWN").toLowerCase();
                 const displayStatus = rawStatus.replace(/_/g, ' ');
+                const priority = pData?.insight?.priorities?.severity || { color: 'transparent', status: 'Unknown' };
 
                 const statusClass = rawStatus === 'success' ? 'status-success' :
                   (rawStatus === 'fail' || rawStatus === 'failure') ? 'status-failure' :
@@ -1215,11 +1750,19 @@ function Dashboard() {
                 return (
                   <div
                     key={pluginName}
-                    className={`terminal-card clickable kinetic-card in-view ${statusClass}`}
+                    className={`terminal-card clickable kinetic-card liquid-glass in-view ${statusClass}`}
                     onClick={() => handleDrillDown(pluginName)}
-                    style={{ cursor: 'pointer' }}
+                    style={{
+                      cursor: 'pointer',
+                      borderLeft: `3px solid ${priority.color}`
+                    }}
                   >
                     <div className="task-body">
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span className="mono" style={{ fontSize: '9px', fontWeight: 900, color: priority.color, letterSpacing: '1px' }}>
+                          {priority.status.toUpperCase()}
+                        </span>
+                      </div>
                       <span className="terminal-title">{pluginName}</span>
                       <div style={{ marginTop: '8px' }}>
                         <span className={`terminal-badge ${rawStatus === 'fail' ? 'failure' : rawStatus}`}>{displayStatus}</span>
@@ -1239,7 +1782,7 @@ function Dashboard() {
             {totalPages > 1 && (
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginTop: '30px', gap: '20px' }}>
                 <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                  <button 
+                  <button
                     className="tab-btn"
                     disabled={workbenchPage === 1}
                     onClick={() => setWorkbenchPage(p => p - 1)}
@@ -1247,8 +1790,8 @@ function Dashboard() {
                   >
                     Prev
                   </button>
-                  <span style={{ fontSize: '13px', color: 'white', fontWeight: 'bold' }}>{workbenchPage} / {totalPages || 1}</span>
-                  <button 
+                  <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>{workbenchPage} / {totalPages || 1}</span>
+                  <button
                     className="tab-btn"
                     disabled={workbenchPage >= totalPages}
                     onClick={() => setWorkbenchPage(p => p + 1)}
@@ -1265,148 +1808,140 @@ function Dashboard() {
     }
 
     if (currentlyActiveTab === "Architecture") {
+      const PHASES = [
+        { range: [1, 1], label: 'Data Acquisition', cls: 'acquisition' },
+        { range: [2, 3], label: 'Processing Layer', cls: 'processing' },
+        { range: [4, 7], label: 'Delivery Engine', cls: 'delivery' },
+        { range: [8, 10], label: 'Operations', cls: 'ops' },
+      ];
+
+      const archSteps = [
+        {
+          num: 1, title: "Data Acquisition", colorVar: "var(--accent-secondary)",
+          imgSrc: "src/assets/data_acquisition_blueprint.png",
+          desc: "The application uses the `metadata-plugin-modernizer` repository via automated GitHub Actions as the primary data source. JSON and CSV files are fetched directly during the build process.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4"/><polyline points="3 16 3 11 8 11"/></svg>
+        },
+        {
+          num: 2, title: "Processing & Aggregation", colorVar: "var(--accent-amber)",
+          desc: "A build-time layer parses schema datasets, extracts keys such as `migrationStatus`, and aggregates outcomes into optimized structural JSON outputs.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2H2v10l9.29 9.29c.94.94 2.48.94 3.42 0l6.58-6.58c.94-.94.94-2.48 0-3.42L12 2Z"/><path d="M7 7h.01"/></svg>
+        },
+        {
+          num: 3, title: "Data Validation", colorVar: "var(--accent-amber)",
+          desc: "Schema validation applies default fallbacks and gracefully handles missing properties across datasets to ensure strict UI rendering stability.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12l2 2 4-4"/><path d="M9 7h6M9 17h6"/></svg>
+        },
+        {
+          num: 4, title: "Static Site Generation", colorVar: "var(--accent-primary)",
+          desc: "The frontend framework computes the JSON dataset artifacts into a scalable React & TypeScript build natively, eliminating continuous runtime APIs.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        },
+        {
+          num: 5, title: "Visualization Layer", colorVar: "var(--accent-primary)",
+          imgSrc: "/visualization_layer_blueprint.png",
+          desc: "Metrics are painted across highly interactive Apache ECharts, visualizing priority rankings, continuous integrations breakdowns, and distribution vectors.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
+        },
+        {
+          num: 6, title: "User Interaction & UX", colorVar: "var(--accent-primary)",
+          desc: "Usability architecture driven entirely by responsive, executive interactive filtering interfaces sorting telemetry data live based on user input loops.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="14.83" y1="9.17" x2="18.36" y2="5.64"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg>
+        },
+        {
+          num: 7, title: "Plugin Reporting", colorVar: "var(--accent-primary)",
+          desc: "Dedicated visualization matrix for isolated plugin entities parsing missing BOMs, automated PR deployment statuses, and direct repository networking.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        },
+        {
+          num: 8, title: "Automation Stack", colorVar: "var(--accent-neon)",
+          imgSrc: automationStackImage,
+          desc: "An automated Continuous Integration pipeline validates dataset fetching, schema computation, and redeploys automatically via webhook routines.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+        },
+        {
+          num: 9, title: "Deployment Target", colorVar: "var(--accent-neon)",
+          desc: "Fully compiled environments map directly to GitHub Pages or `stats.jenkins.io` server architectures ensuring immense public request resilience.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        },
+        {
+          num: 10, title: "Extensibility", colorVar: "var(--accent-neon)",
+          desc: "Comprehensive documentation maps core visualization data structures so developers can graft native logic rules directly into broader Jenkins ecosystems.",
+          icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5l6.74-6.76z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17" y1="15" x2="9" y2="15"/></svg>
+        },
+      ];
+
       return (
-        <div className="tab-content animate-fade-up" key="architecture" style={{ maxWidth: '1000px', margin: '0 auto', paddingTop: '20px' }}>
-            <h2 className="title reveal-node" style={{ fontSize: '24px', marginBottom: '40px', paddingBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-primary)' }}>
-              Engine <span className="text-accent">Architecture</span>
-            </h2>
-            <p className="mb-10 text-base font-normal text-white/70 leading-relaxed max-w-3xl reveal-node">
-              This project will follow a static, build-time data processing approach to transform Jenkins plugin modernization metadata into actionable visual insights.
-            </p>
+        <div className="arch-tab-root animate-fade-up" key="architecture">
 
-            <div className="reveal-node" style={{ marginBottom: '60px', borderRadius: '16px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: 'var(--bg-glass)', boxShadow: '0 8px 30px rgba(0,0,0,0.4)' }}>
-              <img src={architectureImage} alt="Static Data Pipeline Architecture" style={{ width: '100%', display: 'block' }} />
-            </div>
+          {/* Header */}
+          <h2 className="arch-header reveal-node">
+            Engine <span className="text-accent">Architecture</span>
+          </h2>
+          <p className="arch-intro reveal-node">
+            This project follows a static, build-time data processing approach to transform Jenkins plugin modernization metadata into actionable visual insights.
+          </p>
 
-            <ol className="relative border-l border-white/20 mt-12 mb-16 mx-4 sm:mx-8 reveal-node flex flex-col gap-12 sm:gap-16">
-              
-              {[
-                {
-                  num: 1,
-                  title: "Data Acquisition",
-                  desc: "The application uses the `metadata-plugin-modernizer` repository via automated GitHub Actions as the primary data source. JSON and CSV files are fetched directly during build process.",
-                  colorVar: "var(--accent-secondary)",
-                  imgSrc: "src\assets\data_acquisition_blueprint.png"
-                },
-                {
-                  num: 2,
-                  title: "Processing & Aggregation",
-                  desc: "A build-time layer parses schema datasets, extracts keys such as `migrationStatus`, and aggregates outcomes into optimized structural JSON outputs.",
-                  colorVar: "var(--accent-amber)"
-                },
-                {
-                  num: 3,
-                  title: "Data Validation",
-                  desc: "Schema validation applies default fallbacks and gracefully handles missing properties across datasets to ensure strict UI rendering stability.",
-                  colorVar: "var(--accent-amber)"
-                },
-                {
-                  num: 4,
-                  title: "Static Site Generation",
-                  desc: "The frontend framework computes the JSON dataset artifacts into a scalable React & TypeScript build natively, eliminating continuous runtime APIs.",
-                  colorVar: "var(--accent-primary)"
-                },
-                {
-                  num: 5,
-                  title: "Visualization Layer",
-                  desc: "Metrics are painted across highly interactive Apache ECharts, visualizing priority rankings, continuous integrations breakdowns, and distribution vectors.",
-                  colorVar: "var(--accent-primary)",
-                  imgSrc: "/visualization_layer_blueprint.png"
-                },
-                {
-                  num: 6,
-                  title: "User Interaction & UX",
-                  desc: "Usability architecture driven entirely by responsive, executive interactive filtering interfaces sorting telemetry data live based on user input loops.",
-                  colorVar: "var(--accent-primary)"
-                },
-                {
-                  num: 7,
-                  title: "Plugin Reporting",
-                  desc: "Dedicated visualization matrix for isolated plugin entities parsing missing BOMs, automated PR deployment statuses, and direct repository networking.",
-                  colorVar: "var(--accent-primary)"
-                },
-                {
-                  num: 8,
-                  title: "Automation Stack",
-                  desc: "An automated Continuous Integration pipeline validates dataset fetching, schema computation, and redeploys automatically via webhook routines.",
-                  colorVar: "var(--accent-neon)",
-                  imgSrc: "/automation_stack_blueprint.png"
-                },
-                {
-                  num: 9,
-                  title: "Deployment Target",
-                  desc: "Fully compiled environments map directly to GitHub Pages or `stats.jenkins.io` server architectures ensuring immense public request resilience.",
-                  colorVar: "var(--accent-neon)"
-                },
-                {
-                  num: 10,
-                  title: "Extensibility",
-                  desc: "Comprehensive documentation maps core visualization data structures so developers can graft native logic rules directly into broader Jenkins ecosystems.",
-                  colorVar: "var(--accent-neon)"
-                }
-              ].map((item) => (
-                <li key={item.num} className="ml-5 sm:ml-10 group" style={{ marginBottom: '80px', position: 'relative' }}>
-                  <span className="absolute flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded-full -left-[11px] sm:-left-3 ring-8" style={{ background: '#0a0d14', boxShadow: '0 0 0 8px #0a0d14', zIndex: 10 }}>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: item.colorVar, boxShadow: `0 0 10px ${item.colorVar}, 0 0 20px ${item.colorVar}` }}></div>
-                  </span>
-                  
-                  {/* Echoistic Card Container */}
-                  <div className="architecture-card pulse-glow-fx p-8 sm:p-12" style={{ 
-                    background: 'var(--bg-glass)', 
-                    border: '1px solid rgba(255, 255, 255, 0.05)',
-                    borderRadius: 'clamp(16px, 4vw, 24px)', 
-                    position: 'relative',
-                    overflow: 'hidden',
-                    maxWidth: '800px',
-                    transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)',
-                    boxShadow: `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px color-mix(in srgb, ${item.colorVar} 10%, transparent)` // Base echo
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px) scale(1.01)';
-                    // Dynamic bright echo on hover
-                    e.currentTarget.style.boxShadow = `0 12px 40px color-mix(in srgb, ${item.colorVar} 15%, transparent), 0 0 0 2px color-mix(in srgb, ${item.colorVar} 40%, transparent), 0 0 30px color-mix(in srgb, ${item.colorVar} 30%, transparent)`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'none';
-                    // Revert to soft echo
-                    e.currentTarget.style.boxShadow = `0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px color-mix(in srgb, ${item.colorVar} 10%, transparent)`;
-                  }}
+          {/* Pipeline Diagram */}
+          <div className="arch-diagram reveal-node">
+            <img src={architectureImage} alt="Static Data Pipeline Architecture" />
+          </div>
+
+          {/*
+            FLOWBITE VERTICAL TIMELINE
+            HTML pattern from https://flowbite.com/docs/components/timeline/#vertical-timeline
+            ol.relative.border-s  →  .fb-timeline
+            li.mb-10.ms-6         →  .fb-timeline-item
+            span.absolute.-start-3.ring-8  →  .fb-node
+            time badge, h3, p     →  .fb-phase-badge, .fb-item-title, .fb-item-body
+          */}
+          <ol className="fb-timeline">
+            {archSteps.map((item) => {
+              const phaseStart = PHASES.find(p => p.range[0] === item.num);
+              return (
+                <React.Fragment key={item.num}>
+                  {phaseStart && (
+                    <div className="fb-phase-divider">
+                      <span className={`fb-phase-label ${phaseStart.cls}`}>{phaseStart.label}</span>
+                    </div>
+                  )}
+                  <li
+                    className="fb-timeline-item"
+                    style={{ '--node-color': item.colorVar } as React.CSSProperties}
                   >
-                    <div style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '4px',
-                      height: '100%',
-                      background: item.colorVar,
-                      opacity: 0.8,
-                      boxShadow: `0 0 20px ${item.colorVar}`
-                    }}></div>
+                    {/* ── Flowbite Node: span.absolute.-start-3.ring-8 ── */}
+                    <span className="fb-node" title={item.title}>
+                      <span className="fb-node-icon" style={{ color: 'currentColor' }}>{item.icon}</span>
+                    </span>
 
-                    <h3 className="flex items-center mb-6 text-xl sm:text-2xl font-bold tracking-wide" style={{ color: '#ffffff', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '16px' }}>
-                      <span style={{ lineHeight: '1.3' }}>{item.title}</span>
-                    </h3>
+                    {/* ── Flowbite Card body ── */}
+                    <div className="fb-card">
+                      {/* Flowbite: <time> badge pill */}
+                      <span className="fb-phase-badge">[STEP_{item.num < 10 ? `0${item.num}` : item.num}]</span>
 
-                    {/* Integrated Blueprint Images with Animations */}
-                    {item.imgSrc && (
-                       <div style={{ 
-                         marginBottom: '28px', 
-                         borderRadius: '16px', 
-                         overflow: 'hidden', 
-                         border: `1px solid color-mix(in srgb, ${item.colorVar} 30%, transparent)`,
-                         boxShadow: `0 8px 24px rgba(0,0,0,0.5)`,
-                         position: 'relative'
-                       }}>
-                         <div className="scanline" style={{ position: 'absolute', width: '100%', height: '8px', background: `color-mix(in srgb, ${item.colorVar} 40%, transparent)`, boxShadow: `0 0 10px ${item.colorVar}`, opacity: 0.8, zIndex: 5, pointerEvents: 'none' }}></div>
-                         <img src={item.imgSrc} className="w-full h-48 sm:h-72 object-cover" alt={`${item.title} Architecture Blueprint`} style={{ filter: 'brightness(0.9) contrast(1.1)', transition: 'transform 3s ease' }} onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'} />
-                       </div>
-                    )}
+                      {/* Flowbite: h3 title */}
+                      <h3 className="fb-item-title">{item.title}</h3>
 
-                    <div className="text-base sm:text-lg font-light tracking-wide pt-2" style={{ color: 'rgba(255,255,255,0.85)', lineHeight: '1.8' }} dangerouslySetInnerHTML={{ __html: item.desc.replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.08); padding: 4px 10px; border-radius: 6px; font-family: var(--mono); font-size: 14px; color: var(--text-primary); border: 1px solid rgba(255,255,255,0.1)">$1</code>') }} />
-                  </div>
-                </li>
-              ))}
-            </ol>
+                      {/* Blueprint image (optional) */}
+                      {item.imgSrc && (
+                        <div className="fb-blueprint">
+                          <img src={item.imgSrc} alt={`${item.title} Blueprint`} />
+                        </div>
+                      )}
+
+                      {/* Flowbite: p description */}
+                      <p
+                        className="fb-item-body"
+                        dangerouslySetInnerHTML={{
+                          __html: item.desc.replace(/`([^`]+)`/g, '<code>$1</code>')
+                        }}
+                      />
+                    </div>
+                  </li>
+                </React.Fragment>
+              );
+            })}
+          </ol>
         </div>
       );
     }
@@ -1438,7 +1973,7 @@ function Dashboard() {
       </div>
       <div
         className="parallax-bg-text parallax-3"
-        style={{ 
+        style={{
           transform: `translateY(calc(var(--mouse-y) * -0.08)) translateX(calc(var(--mouse-x) * -0.05))`,
           opacity: 0.02
         }}
@@ -1457,37 +1992,37 @@ function Dashboard() {
         }}
       >
         <div className="flex flex-col md:flex-row items-center md:items-start gap-6 md:gap-10 w-full max-w-6xl mx-auto px-4 md:px-0">
-          
+
           {/* Logo */}
           <div className="flex-shrink-0 relative group">
             <div className="absolute inset-0 bg-white/10 blur-2xl rounded-full scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
-            <img 
-              src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Jenkins_logo.svg" 
-              alt="Jenkins Logo" 
-              className="w-24 sm:w-28 md:w-32 h-auto drop-shadow-[0_0_24px_rgba(255,255,255,0.3)] transition-transform duration-500 hover:scale-105" 
+            <img
+              src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Jenkins_logo.svg"
+              alt="Jenkins Logo"
+              className="w-24 sm:w-28 md:w-32 h-auto drop-shadow-[0_0_24px_rgba(255,255,255,0.3)] transition-transform duration-500 hover:scale-105"
             />
           </div>
 
           {/* Text Content */}
           <div className="flex flex-col items-center md:items-start text-center md:text-left pt-2 md:pt-4">
-            <h1 className="title font-black leading-[1.1] tracking-tight mb-6 text-3xl sm:text-4xl md:text-5xl lg:text-[64px] text-white">
-               Jenkins Plugin <br className="hidden md:block" />
-               <span className="plugin-name" style={{ backgroundImage: 'linear-gradient(45deg, var(--accent-primary), var(--accent-neon))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>Modernization Insights</span>
+            <h1 className="title font-black leading-[1.1] tracking-tight mb-6 text-3xl sm:text-4xl md:text-5xl lg:text-[64px]" style={{ color: 'var(--text-primary)' }}>
+              Jenkins Plugin <br className="hidden md:block" />
+              <span className="plugin-name" style={{ backgroundImage: 'linear-gradient(45deg, var(--accent-primary), var(--accent-neon))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>Modernization Insights</span>
             </h1>
 
             <div className="flex flex-col gap-3 relative border-t md:border-t-0 md:border-l-[3px] border-white/20 pt-5 md:pt-0 md:pl-6 max-w-3xl">
               <div className="absolute top-0 left-[-3px] w-[3px] h-0 md:h-full bg-gradient-to-b from-[var(--accent-primary)] to-[var(--accent-neon)] hidden md:block"></div>
-              
-              <p className="text-white/90 text-lg sm:text-xl md:text-[22px] font-medium leading-relaxed tracking-wide m-0 drop-shadow-md">
+
+              <p className="text-lg sm:text-xl md:text-[22px] font-medium leading-relaxed tracking-wide m-0 drop-shadow-md" style={{ color: 'var(--text-primary)', opacity: 0.9 }}>
                 A static analytics dashboard for visualizing Jenkins plugin modernization status and ecosystem health.
               </p>
-              
+
               <p className="text-[color:var(--accent-secondary)] text-xs sm:text-sm md:text-[13px] font-mono uppercase tracking-[0.2em] font-bold mt-1 opacity-90">
                 Turning modernization data into actionable insights for Jenkins maintainers
               </p>
             </div>
           </div>
-          
+
         </div>
       </div>
 
@@ -1497,12 +2032,6 @@ function Dashboard() {
           className={`tab-btn ${currentlyActiveTab === "Global Overview" ? "active" : ""}`}
         >
           Overview
-        </button>
-        <button
-          onClick={() => setCurrentlyActiveTab("Topic Dashboards")}
-          className={`tab-btn ${currentlyActiveTab === "Topic Dashboards" ? "active" : ""}`}
-        >
-          Topic Matrix
         </button>
         <button
           onClick={() => setCurrentlyActiveTab("Strategic Workbench")}
@@ -1525,11 +2054,63 @@ function Dashboard() {
       </div>
 
       {/* 🛠 GLOBAL COMMAND HUB (V15) */}
-      {(currentlyActiveTab === "Global Overview" || currentlyActiveTab === "Topic Dashboards" || currentlyActiveTab === "Strategic Workbench" || currentlyActiveTab === "Data Explorer") && renderCommandBar()}
+      {(currentlyActiveTab === "Global Overview" || currentlyActiveTab === "Strategic Workbench" || currentlyActiveTab === "Data Explorer") && renderCommandBar()}
 
       <main id="main-content">
         {renderMainContent()}
       </main>
+
+      {/* 🛠 V50: THE ORCHESTRATION TERMINAL (FLOATING TRAY) */}
+      {surgeryQueue.length > 0 && (
+        <div className="surgery-tray-container reveal-node">
+          <div className="surgery-tray kinetic-card liquid-glass">
+            <div className="tray-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div className="pulse-dot active"></div>
+                <span className="mono" style={{ fontSize: '11px', fontWeight: 800, letterSpacing: '1px' }}>
+                  SURGERY_QUEUE // {surgeryQueue.length} ENTITIES SELECTED
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className="tab-btn mini"
+                  onClick={() => {
+                    const masterScript = [
+                      "#!/bin/bash",
+                      `# AUTOMATED MODERNIZATION SCRIPT - GENERATED: ${new Date().toISOString()}`,
+                      "# ----------------------------------------------------------------",
+                      ...surgeryQueue.map(name => {
+                        const plugin = allPluginsWithInsights.find(p => p.pluginName === name);
+                        return [
+                          `\n# --- Targeting: ${name} ---`,
+                          ...(plugin?.insight.surgical.commands || [])
+                        ].join('\n');
+                      })
+                    ].join('\n');
+
+                    const blob = new Blob([masterScript], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `modernize_batch_${surgeryQueue.length}.sh`;
+                    a.click();
+                  }}
+                >
+                  GENERATE MASTER SCRIPT (.SH)
+                </button>
+                <button className="tab-btn mini danger" onClick={() => setSurgeryQueue([])}>CLEAR</button>
+              </div>
+            </div>
+            <div className="tray-item-list">
+              {surgeryQueue.map(name => (
+                <div key={name} className="tray-item mono" onClick={() => handleDrillDown(name)}>
+                  {name} <span onClick={(e) => { e.stopPropagation(); toggleQueueItem(name); }} className="remove-cross">×</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

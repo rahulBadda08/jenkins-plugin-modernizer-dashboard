@@ -74,5 +74,5 @@ export default defineConfig([
 ```
 =======
 # jenkins-plugin-modernizer-dashboard
-Dashboard for visualizing Jenkins plugin modernization statistics (GSoC 2026 proposal work)
+Dashboard for visualizing Jenkins plugin modernization statistics.
 >>>>>>> d99ed4bb35ebf32f1ad6e0b8aa7e38318e5d16b5

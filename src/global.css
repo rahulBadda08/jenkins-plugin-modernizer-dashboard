@@ -1,42 +1,119 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@100..900&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@100..900&family=JetBrains+Mono:wght@400;500;700&display=swap');
-
 :root {
-  --bg-color: #030712;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --accent-neon: #D4ED2C;
-  --accent-primary: #8b5cf6;
-  --accent-secondary: #06b6d4;
-  --accent-green: #10b981;
-  --accent-red: #ef4444;
-  --accent-amber: #f59e0b;
-
-  --card-bg: rgba(10, 15, 30, 0.25);
-  --card-border: rgba(255, 255, 255, 0.04);
-  --inner-glow: inset 0 0 20px rgba(139, 92, 246, 0.05);
+  /* JDL Core Palette: Dark Mode (Default for this futuristic dash) */
+  --bg-color: #1a1b1e;
+  --text-primary: #e9ecef;
+  --text-primary-rgb: 233, 236, 239;
+  --text-secondary: #adb5bd;
+  --text-secondary-rgb: 173, 181, 189;
   
-  --card-radius: 32px;
-  --glass-refraction: rgba(255, 255, 255, 0.12);
-  --glass-blur: 64px;
+  --jenkins-blue: #38d1ff;
+  --jenkins-navy: #121212;
+  --accent-primary: #38d1ff;
+  --accent-secondary: #007bff;
+  --accent-green: #40c057;
+  --accent-red: #fa5252;
+  --accent-amber: #fab005;
+  --accent-neon: #82c91e;
 
-  --glass-shadow: 0 24px 64px 0 rgba(0, 0, 0, 0.6);
-  --hover-shadow: 0 32px 80px rgba(139, 92, 246, 0.12), 0 0 0 1px rgba(139, 92, 246, 0.4);
+  --card-bg: rgba(37, 38, 43, 0.4);
+  --glass-bg: rgba(37, 38, 43, 0.6);
+  --dropdown-bg: rgba(30, 31, 35, 0.95);
+  --input-bg: rgba(25, 26, 30, 0.4);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --card-border: rgba(255, 255, 255, 0.06);
+  
+  --card-radius: 20px; /* Fluid professional radius */
+  --glass-refraction: rgba(255, 255, 255, 0.08);
+  --glass-blur: 24px;
 
-  --sans: 'Inter', system-ui, sans-serif;
-  --display: 'Outfit', sans-serif;
+  --glass-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --hover-shadow: 0 20px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(var(--jenkins-blue-rgb, 56, 209, 255), 0.2);
+
+  --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --display: 'Outfit', -apple-system, sans-serif;
   --mono: 'JetBrains Mono', monospace;
 
   color-scheme: dark;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+:root.light-mode {
+  /* JDL Core Palette: Light Mode (Standard Jenkins) */
+  --bg-color: #f8f9fa;
+  --text-primary: #212529;
+  --text-primary-rgb: 33, 37, 41;
+  --text-secondary: #6c757d;
+  --text-secondary-rgb: 108, 117, 125;
+  
+  --jenkins-blue: #003056;
+  --jenkins-navy: #002a4d;
+  --accent-primary: #003056;
+  --accent-secondary: #1864ab;
+  --accent-green: #2b8a3e;
+  --accent-red: #c92a2a;
+  --accent-amber: #e67e22;
+  --accent-neon: #5c940d;
+
+  --card-bg: rgba(255, 255, 255, 0.75);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --dropdown-bg: rgba(255, 255, 255, 0.98);
+  --input-bg: rgba(0, 0, 0, 0.03);
+  --border-subtle: rgba(0, 0, 0, 0.08);
+  --card-border: rgba(0, 0, 0, 0.06);
+  
+  --glass-refraction: rgba(255, 255, 255, 0.2);
+  --glass-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --hover-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+
+  color-scheme: light;
+}
+
+html, body {
+  width: 100%;
+  max-width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden !important;
+  position: relative;
+  box-sizing: border-box;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+.truncate-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 100%;
+}
+
+#root {
+  overflow-x: hidden;
+  width: 100%;
+  min-height: 100vh;
+  z-index: 1;
 }
 
 body, table, th, td, input, select, textarea, button {
   margin: 0;
   font-family: var(--sans);
-  background-color: var(--bg-color);
+  color: var(--text-primary);
+}
+
+body {
   background-image:
     radial-gradient(1200px circle at var(--mouse-x, 0px) var(--mouse-y, 0px), rgba(59, 130, 246, 0.08), transparent 80%),
     radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
@@ -44,10 +121,7 @@ body, table, th, td, input, select, textarea, button {
     radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
     radial-gradient(at 0% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
   background-attachment: fixed;
-  color: var(--text-primary);
-  -webkit-font-smoothing: antialiased;
   position: relative;
-  overflow-x: hidden;
   cursor: none !important; /* Hide default cursor globally */
 }
 
@@ -111,7 +185,7 @@ body::after {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--text-primary-rgb), 0.05);
   border-radius: 100px;
   margin: 2px;
 }
@@ -176,7 +250,7 @@ button:active,
   font-size: 25vw;
   line-height: 1;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.03);
+  -webkit-text-stroke: 1px var(--card-border);
   pointer-events: none;
   z-index: 0;
   white-space: nowrap;
@@ -187,14 +261,20 @@ button:active,
 .parallax-1 { top: 10%; left: -5%; }
 .parallax-2 { bottom: 10%; right: -5%; }
 
+@media (max-width: 768px) {
+  .parallax-bg-text {
+    display: none !important;
+  }
+}
+
 /* ── KINETIC MARQUEE SYSTEM ── */
 .marquee-wrapper {
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.02);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 15px 0;
-  margin: 40px 0;
+  background: rgba(var(--text-primary-rgb), 0.02);
+  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+  padding: 12px 0;
+  margin: 10px 0 0 0;
   backdrop-filter: blur(10px);
 }
 

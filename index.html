@@ -3,8 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="Jenkins Plugin Modernizer Dashboard - Unified telemetry, diagnostic starbursts, and analytical matrices for the GSoC 2026 ecosystem modernization engine." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, shrink-to-fit=no" />
+    <meta name="description" content="Jenkins Plugin Modernizer Dashboard - Unified telemetry, diagnostic starbursts, and analytical matrices for the ecosystem modernization engine." />
     <title>Plugin Modernizer Stats Visualization</title>
   </head>
   <body>
@@ -18,38 +18,66 @@
       (function() {
         const dot = document.querySelector('.cursor-dot');
         const follower = document.querySelector('.cursor-follower');
+        const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
+        
         let mouseX = 0;
         let mouseY = 0;
         let followerX = 0;
         let followerY = 0;
 
-        window.addEventListener('mousemove', (e) => {
-          mouseX = e.clientX;
-          mouseY = e.clientY;
-          // Apply translate(-50%, -50%) via translate3d to keep dot centered on ACTUAL pointer
+        // Hide by default on touch devices
+        if (isTouchDevice) {
+          dot.style.opacity = '0';
+          follower.style.opacity = '0';
+        }
+
+        const updateCursor = (x, y) => {
+          mouseX = x;
+          mouseY = y;
           dot.style.transform = `translate3d(${mouseX}px, ${mouseY}px, 0) translate(-50%, -50%)`;
           document.documentElement.style.setProperty('--mouse-x', mouseX + 'px');
           document.documentElement.style.setProperty('--mouse-y', mouseY + 'px');
+        };
+
+        window.addEventListener('mousemove', (e) => {
+          if (isTouchDevice) return;
+          updateCursor(e.clientX, e.clientY);
         });
+
+        // Touch event handling
+        window.addEventListener('touchstart', (e) => {
+          dot.style.opacity = '1';
+          follower.style.opacity = '1';
+          updateCursor(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: true });
+
+        window.addEventListener('touchmove', (e) => {
+          updateCursor(e.touches[0].clientX, e.touches[0].clientY);
+        }, { passive: true });
+
+        window.addEventListener('touchend', () => {
+          dot.style.opacity = '0';
+          follower.style.opacity = '0';
+        }, { passive: true });
 
         function animate() {
           followerX += (mouseX - followerX) * 0.35;
           followerY += (mouseY - followerY) * 0.35;
-          // Apply translate(-50%, -50%) to keep follower centered on lerp path
           follower.style.transform = `translate3d(${followerX}px, ${followerY}px, 0) translate(-50%, -50%)`;
           requestAnimationFrame(animate);
         }
         animate();
 
-        // Global Hover Detection (Fixed with mouseover bubbling)
+        // Global Hover Detection
         window.addEventListener('mouseover', (e) => {
+          if (isTouchDevice) return;
           const target = e.target.closest('button, a, .clickable, .kinetic-card, .terminal-card, .tab-btn, .industrial-btn');
           
           if (target) {
-            follower.style.width = '60px'; // Further reduced size
+            follower.style.width = '60px';
             follower.style.height = '60px';
-            follower.style.background = 'rgba(212, 237, 44, 0.4)'; // Increased transparency (Alpha 0.4)
-            follower.style.boxShadow = '0 0 15px rgba(212, 237, 44, 0.3)'; // Lighter, subtle glow
+            follower.style.background = 'rgba(212, 237, 44, 0.4)';
+            follower.style.boxShadow = '0 0 15px rgba(212, 237, 44, 0.3)';
             follower.style.borderWidth = '0px';
             dot.style.opacity = '0';
           } else {

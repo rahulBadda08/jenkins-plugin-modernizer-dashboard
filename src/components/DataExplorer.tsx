@@ -9,13 +9,33 @@ interface Migration {
   migrationStatus: MigrationStatus;
   pullRequestStatus: PRStatus;
   pullRequestUrl: string;
+  tags: string[];
+  checkRuns?: Record<string, string | null>;
+  checkRunsSummary?: string;
+  jenkinsVersion?: string;
   timestamp: string;
+}
+
+interface PluginInsight {
+  actionInsight: {
+    status: string;
+    severity: 'danger' | 'warning' | 'success';
+    summary: string[];
+    recommendations: string[];
+  };
+  priorities: {
+    severity: { label: string; status: string; color: string };
+    maintenance: { label: string; status: string; color: string };
+    security: { label: string; status: string; color: string };
+  };
+  checklist: Array<{ label: string; value: boolean; description: string }>;
 }
 
 interface PluginData {
   pluginName: string;
   pluginRepository: string;
   migrations: Migration[];
+  insight?: PluginInsight;
 }
 
 const formatLabel = (str: string) => {
@@ -215,10 +235,11 @@ export default function DataExplorer({
 
       {/* 5. THE RESULTS */}
       {!isMobile ? (
-        <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)', background: 'rgba(0,0,0,0.1)' }}>
+        <div style={{ overflowX: 'auto', borderRadius: '16px', border: '1px solid var(--card-border)', background: 'rgba(var(--text-primary-rgb), 0.03)' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.02)' }}>
+              <tr style={{ borderBottom: '1px solid var(--card-border)', background: 'rgba(var(--text-primary-rgb), 0.05)' }}>
+                <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Priority</th>
                 <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Plugin Entity</th>
                 <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Migration</th>
                 <th style={{ padding: '16px 20px', fontSize: '11px', letterSpacing: '1px', textTransform: 'uppercase', color: 'var(--text-secondary)' }}>Pull Request</th>
@@ -226,20 +247,34 @@ export default function DataExplorer({
               </tr>
             </thead>
             <tbody>
-              {paginatedData.map((plugin) => {
+              {paginatedData.map((plugin: any) => {
                 const migration = plugin.migrations?.[0] || {} as Migration;
+                const priority = plugin.insight?.priorities?.severity || { color: 'var(--text-secondary)', status: 'Unknown' };
+                
                 return (
                   <tr 
                     key={plugin.pluginName} 
-                    style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', transition: 'background 0.2s' }}
-                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                    style={{ borderBottom: '1px solid var(--card-border)', transition: 'background 0.2s' }}
+                    onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(var(--text-primary-rgb), 0.02)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
+                    <td style={{ padding: '16px 20px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} title={`Severity: ${priority.status}`}>
+                        <div style={{ 
+                          width: '10px', 
+                          height: '10px', 
+                          borderRadius: '50%', 
+                          background: priority.color,
+                          boxShadow: `0 0 10px ${priority.color}` 
+                        }}></div>
+                        <span className="mono" style={{ fontSize: '10px', fontWeight: 800, color: priority.color }}>{priority.status.toUpperCase()}</span>
+                      </div>
+                    </td>
                     <td style={{ padding: '16px 20px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <span 
                           onClick={() => onPluginSelect(plugin.pluginName)}
-                          style={{ cursor: 'pointer', color: 'white', fontWeight: 600, fontSize: '15px' }}
+                          style={{ cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 600, fontSize: '15px' }}
                         >
                           {plugin.pluginName}
                         </span>
@@ -280,8 +315,8 @@ export default function DataExplorer({
                 onClick={() => onPluginSelect(plugin.pluginName)}
                 className="animate-fade-up"
                 style={{ 
-                  background: 'rgba(255,255,255,0.03)', 
-                  border: '1px solid rgba(255,255,255,0.06)', 
+                  background: 'rgba(var(--text-primary-rgb), 0.03)', 
+                  border: '1px solid var(--card-border)', 
                   borderRadius: '24px', 
                   padding: '20px',
                   display: 'flex',
@@ -290,11 +325,24 @@ export default function DataExplorer({
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <h3 style={{ color: 'white', fontSize: '18px', fontWeight: 700, margin: 0, flex: 1 }}>{plugin.pluginName}</h3>
+                  <h3 style={{ color: 'var(--text-primary)', fontSize: '18px', fontWeight: 700, margin: 0, flex: 1 }}>{plugin.pluginName}</h3>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
                 </div>
                 
                 <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {plugin.insight?.priorities?.severity && (
+                    <span style={{ 
+                      fontSize: '10px', 
+                      background: `rgba(${plugin.insight.priorities.severity.color === 'var(--accent-red)' ? '239, 68, 68' : '245, 158, 11'}, 0.1)`, 
+                      color: plugin.insight.priorities.severity.color, 
+                      padding: '2px 8px', 
+                      borderRadius: '4px', 
+                      fontWeight: 900,
+                      border: `1px solid ${plugin.insight.priorities.severity.color}33`
+                    }}>
+                      {plugin.insight.priorities.severity.status.toUpperCase()}
+                    </span>
+                  )}
                   {roadmapList?.includes(plugin.pluginName) && (
                     <span style={{ fontSize: '10px', background: 'rgba(96, 165, 250, 0.1)', color: 'var(--accent-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>ROADMAP</span>
                   )}
@@ -303,9 +351,6 @@ export default function DataExplorer({
                   )}
                   <span className={`badge badge-${(migration.migrationStatus || 'unknown').toLowerCase()}`}>
                     {formatLabel(migration.migrationStatus || "UNKNOWN")}
-                  </span>
-                  <span className={`badge badge-${(migration.pullRequestStatus || 'unknown').toLowerCase()}`}>
-                    {formatLabel(migration.pullRequestStatus || "UNKNOWN")}
                   </span>
                 </div>
 
@@ -332,7 +377,7 @@ export default function DataExplorer({
           >
             Prev
           </button>
-          <span style={{ fontSize: '13px', color: 'white', fontWeight: 'bold' }}>{currentPage} / {totalPages || 1}</span>
+          <span style={{ fontSize: '13px', color: 'var(--text-primary)', fontWeight: 'bold' }}>{currentPage} / {totalPages || 1}</span>
           <button 
             className="tab-btn"
             disabled={currentPage >= totalPages}
