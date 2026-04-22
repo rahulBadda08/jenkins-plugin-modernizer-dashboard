@@ -378,11 +378,6 @@ function Dashboard() {
   const [workbenchPage, setWorkbenchPage] = useState(1);
   const itemsPerPage = 16;
 
-  const [isScanning, setIsScanning] = useState(false);
-  const handleSystemSweep = () => {
-    setIsScanning(true);
-    setTimeout(() => setIsScanning(false), 2000);
-  };
 
   // ── HOOK: CINEMATIC SCROLL TRACKER (V21) ──
   const [isScrolled, setIsScrolled] = useState(false);
@@ -1135,51 +1130,6 @@ function Dashboard() {
       </div>
 
       <div className="command-hub-right-group" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap' }}>
-
-        {/* Cinematic System Sweep (V50) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-          <div style={{ textAlign: 'right', minWidth: '120px' }}>
-            <div className="mono" style={{ fontSize: '9px', color: isScanning ? 'var(--accent-secondary)' : 'var(--text-secondary)', opacity: 0.6, letterSpacing: '2px' }}>
-              {isScanning ? 'SCANNING_SYSTEM' : 'SYSTEM_IDLE'}
-            </div>
-            <div className="mono" style={{ fontSize: '11px', fontWeight: '800', color: isScanning ? 'var(--accent-secondary)' : 'var(--text-primary)' }}>
-              {isScanning ? 'INTEGRITY_CHECK...' : 'READY_FOR_COMMAND'}
-            </div>
-          </div>
-          
-          <button
-            onClick={handleSystemSweep}
-            className={`tab-btn clickable marquee-btn ${isScanning ? 'active' : ''}`}
-            style={{
-              padding: '10px 20px',
-              borderRadius: '12px',
-              background: isScanning ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              color: isScanning ? 'white' : 'var(--text-primary)',
-              fontSize: '11px',
-              fontWeight: '900',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
-              boxShadow: isScanning ? '0 0 20px rgba(56, 189, 248, 0.4)' : 'none'
-            }}
-            disabled={isScanning}
-          >
-            <svg 
-              width="14" 
-              height="14" 
-              viewBox="0 0 24 24" 
-              fill="none" 
-              stroke="currentColor" 
-              strokeWidth="2.5"
-              className={isScanning ? 'animate-spin' : ''}
-            >
-              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-            </svg>
-            {isScanning ? 'SWEEPING' : 'SWEEP'}
-          </button>
-        </div>
 
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
@@ -2182,15 +2132,22 @@ function Dashboard() {
 
                     const blob = new Blob([masterScript], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `modernize_batch_${surgeryQueue.length}.sh`;
-                    a.click();
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `modernize_batch_${surgeryQueue.length}.sh`;
+                    link.click();
+                    URL.revokeObjectURL(url);
                   }}
                 >
                   GENERATE_MASTER_SCRIPT (.SH)
                 </button>
-                <button className="tab-btn mini danger" onClick={() => setSurgeryQueue([])}>CLEAR</button>
+                <button
+                  type="button"
+                  className="tab-btn mini danger"
+                  onClick={() => setSurgeryQueue([])}
+                >
+                  CLEAR
+                </button>
               </div>
             </div>
             <div className="tray-item-list">
