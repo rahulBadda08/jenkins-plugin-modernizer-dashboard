@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect } from "react";
 import ReactECharts from "echarts-for-react";
+import * as echarts from "echarts";
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -88,8 +89,9 @@ const BarChart: React.FC<BarChartProperties> = ({
       title: {
         text: title,
         left: "center",
+        top: 0,
         textStyle: { 
-          fontSize: isMobile ? 14 : 16, 
+          fontSize: isMobile ? 12 : 14, 
           fontWeight: 700, 
           color: theme === 'dark' ? "#F3F4F6" : "#0f172a", 
           fontFamily: 'Outfit, sans-serif' 
@@ -144,8 +146,8 @@ const BarChart: React.FC<BarChartProperties> = ({
       grid: {
         left: "4%",
         right: "4%",
-        bottom: isMobile ? "38%" : "28%",
-        top: "15%",
+        bottom: isMobile ? "35%" : "22%",
+        top: "12%",
         containLabel: true
       },
       dataZoom: labels.length > 15 ? [
@@ -177,12 +179,13 @@ const BarChart: React.FC<BarChartProperties> = ({
         type: "category",
         data: labels,
         axisLabel: {
-          rotate: isMobile ? 45 : (rotateLabel ?? 30),
-          interval: 0,
+          rotate: isMobile ? 45 : (rotateLabel ?? 45),
+          interval: labels.length > 20 ? 'auto' : 0,
           color: theme === 'dark' ? "#94a3b8" : "#475569",
           fontFamily: 'Inter, sans-serif',
-          fontSize: isMobile ? 9 : 10,
-          formatter: (value: string) => value.length > (isMobile ? 10 : 14) ? value.substring(0, (isMobile ? 10 : 14)) + '...' : value
+          fontSize: isMobile ? 8 : 9,
+          margin: 12,
+          formatter: (value: string) => value.length > (isMobile ? 12 : 16) ? value.substring(0, (isMobile ? 12 : 16)) + '...' : value
         },
         axisLine: { lineStyle: { color: theme === 'dark' ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.08)" } },
         axisTick: { show: false }
@@ -217,7 +220,11 @@ const BarChart: React.FC<BarChartProperties> = ({
           barWidth: '60%',
           barGap: '-100%',
           itemStyle: {
-            borderRadius: [10, 10, 10, 10]
+            borderRadius: [20, 20, 20, 20],
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: '#38bdf8' },
+              { offset: 1, color: '#818cf8' }
+            ])
           },
           emphasis: {
             itemStyle: {

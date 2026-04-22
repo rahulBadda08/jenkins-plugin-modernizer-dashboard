@@ -7,8 +7,10 @@ import React, { useState, useMemo, useEffect, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // --- ASSETS ---
-import architectureImage from "./assets/ARCHITECTURE DIAGRAM (EXPLANATION SECTION) - visual selection.png";
+import architectureImage from "./assets/architecture_diagram.png";
 import automationStackImage from "./assets/automation_stack_blueprint.png";
+import dataAcquisitionImage from "./assets/data_acquisition_blueprint.png";
+import visualizationLayerImage from "./assets/visualization_layer_blueprint.png";
 
 // ── STRICT TYPESCRIPT DEFINITIONS ──
 type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
@@ -99,6 +101,7 @@ const MarqueeHeader: React.FC<{ text: string; style?: React.CSSProperties }> = (
 
 // ── V49: THE SURGICAL DIRECTIVE ENGINE ──
 const LTS_BASELINE = "2.452.3";
+const OUTDATED_MINOR_THRESHOLD = 440;
 
 const calculateDrift = (current: string): { gap: number; criticality: 'low' | 'med' | 'critical' } => {
   const parse = (v: string) => v.split('.').map(p => parseInt(p) || 0);
@@ -169,7 +172,7 @@ const getPluginInsight = (plugin: PluginData): PluginInsight => {
   const ver = migration.jenkinsVersion || "0.0";
   const prStatus = (migration.pullRequestStatus || "unknown").toLowerCase();
 
-  const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 440);
+  const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
   const hasSecurityRisk = checkRunKeys.some(k => k.toLowerCase().includes("security")) &&
     checkRuns[checkRunKeys.find(k => k.toLowerCase().includes("security"))!] !== "success";
   const hasCiFailure = migration.checkRunsSummary !== "success";
@@ -308,7 +311,7 @@ const calculateHealthScore = (plugin: PluginData): number => {
   if (checkRuns['BOM'] !== 'success' && checkRuns['Bom'] !== 'success') score -= 15;
   if (prStatus === "unknown" || prStatus === "none" || prStatus === "") score -= 15;
   if (Object.keys(checkRuns).some(k => k.toLowerCase().includes("security") && checkRuns[k] !== "success")) score -= 15;
-  if (ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 440)) score -= 10;
+  if (ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD)) score -= 10;
 
   return Math.max(0, score);
 };
@@ -541,7 +544,7 @@ function Dashboard() {
       if (severityFilter !== "ALL") {
         const mStatus = (migration.migrationStatus || "").toLowerCase();
         const ver = p.migrations[0].jenkinsVersion || "0.0";
-        const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 400);
+        const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
 
         if (severityFilter === "CRITICAL") matchesSeverity = mStatus === "fail" || mStatus === "failure";
         else if (severityFilter === "WARNING") matchesSeverity = isOutdated || mStatus === "aborted";
@@ -553,7 +556,7 @@ function Dashboard() {
 
     const outdatedPlugins = baseList.filter(p => {
       const ver = p.migrations[0].jenkinsVersion || "0.0";
-      return ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 400);
+      return ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
     });
 
     const failedPlugins = baseList.filter(p => {
@@ -633,7 +636,7 @@ function Dashboard() {
       // Severity Match
       const status = (migration.migrationStatus || "").toLowerCase();
       const ver = migration.jenkinsVersion || "0.0";
-      const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < 400);
+      const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
 
       if (severityFilter === "CRITICAL") return status === "fail" || status === "failure";
       if (severityFilter === "WARNING") return isOutdated || status === "aborted";
@@ -1041,7 +1044,7 @@ function Dashboard() {
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         {isTopicOpen && (
-          <div className="opaque-dropdown" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, maxHeight: '400px', overflowY: 'auto', borderRadius: '20px', padding: '8px' }}>
+          <div className="opaque-dropdown reveal-node" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, maxHeight: '400px', overflowY: 'auto', borderRadius: '20px', padding: '8px' }}>
             <div
               onClick={(e) => { 
                 e.stopPropagation(); 
@@ -1105,7 +1108,7 @@ function Dashboard() {
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9l6 6 6-6" /></svg>
         </button>
         {isPROpen && (
-          <div className="opaque-dropdown" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, borderRadius: '20px', padding: '8px' }}>
+          <div className="opaque-dropdown reveal-node" style={{ position: 'absolute', top: 'calc(100% + 12px)', left: 0, borderRadius: '20px', padding: '8px' }}>
             {[
               { value: 'ALL', label: 'All Activity', color: 'var(--text-primary)' },
               { value: 'MERGED', label: 'Merged', color: '#FF007F' },
@@ -1132,6 +1135,53 @@ function Dashboard() {
       </div>
 
       <div className="command-hub-right-group" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap' }}>
+
+        {/* Cinematic System Sweep (V50) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div style={{ textAlign: 'right', minWidth: '120px' }}>
+            <div className="mono" style={{ fontSize: '9px', color: isScanning ? 'var(--accent-secondary)' : 'var(--text-secondary)', opacity: 0.6, letterSpacing: '2px' }}>
+              {isScanning ? 'SCANNING_SYSTEM' : 'SYSTEM_IDLE'}
+            </div>
+            <div className="mono" style={{ fontSize: '11px', fontWeight: '800', color: isScanning ? 'var(--accent-secondary)' : 'var(--text-primary)' }}>
+              {isScanning ? 'INTEGRITY_CHECK...' : 'READY_FOR_COMMAND'}
+            </div>
+          </div>
+          
+          <button
+            onClick={handleSystemSweep}
+            className={`tab-btn clickable marquee-btn ${isScanning ? 'active' : ''}`}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '12px',
+              background: isScanning ? 'var(--accent-secondary)' : 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: isScanning ? 'white' : 'var(--text-primary)',
+              fontSize: '11px',
+              fontWeight: '900',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              transition: 'all 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+              boxShadow: isScanning ? '0 0 20px rgba(56, 189, 248, 0.4)' : 'none'
+            }}
+            disabled={isScanning}
+          >
+            <svg 
+              width="14" 
+              height="14" 
+              viewBox="0 0 24 24" 
+              fill="none" 
+              stroke="currentColor" 
+              strokeWidth="2.5"
+              className={isScanning ? 'animate-spin' : ''}
+            >
+              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+            </svg>
+            {isScanning ? 'SWEEPING' : 'SWEEP'}
+          </button>
+        </div>
+
+
         <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
           <div style={{ textAlign: 'right' }}>
             <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', opacity: 0.6, letterSpacing: '1px' }}>ECOSYSTEM_COVERAGE</div>
@@ -1176,7 +1226,7 @@ function Dashboard() {
       return (
         <div className="tab-content" key="global" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
 
-          {/* 🥇 TIER 1: ECOSYSTEM HEALTH */}
+          
 
           <MarqueeHeader text="ECOSYSTEM HEALTH REPORT" />
           <div className="executive-hero-grid" style={{ perspective: '1200px' }}>
@@ -1215,12 +1265,12 @@ function Dashboard() {
           </div>
 
 
-          {/* 🥈 TIER 2: ANALYTICAL BREAKDOWN (GLOBAL CHARTS) */}
-          <div className="charts-grid reveal-node animate-delay-4" style={{ marginTop: '0px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
+        
+          <div ref={chartRef} className="charts-grid reveal-node animate-delay-4" style={{ marginTop: '0px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
             <div className="glass-card chart-card">
               <PieChart
                 data={topPieData}
-                title="Sector Distribution - Modernization Focus"
+                title="Sector Distribution"
                 theme={theme}
               />
             </div>
@@ -1230,7 +1280,7 @@ function Dashboard() {
                 data={integrityData}
                 insights={integrityInsights}
                 colors={new Array(integrityData.length).fill('#10B981')}
-                title="Global Integrity Index - Check-Run Success"
+                title="Global Integrity Index"
                 theme={theme}
                 yMax={1}
               />
@@ -1243,7 +1293,7 @@ function Dashboard() {
                 labels={overviewLabels}
                 data={overviewData}
                 colors={new Array(overviewData.length).fill('#F59E0B')}
-                title="Modernization Intensity - Ecosystem Volatility"
+                title="Modernization Intensity"
                 theme={theme}
                 rotateLabel={45}
                 onItemClick={handleDrillDown}
@@ -1251,7 +1301,7 @@ function Dashboard() {
             </div>
           </div>
 
-          {/* 🥉 TIER 3: STRATEGIC ACTION HUB */}
+        
           <div className="strategic-hub reveal-node" style={{ '--delay': '500ms' } as React.CSSProperties}>
             <div className="hub-briefing">
               <div className="system-status-badge">
@@ -1299,7 +1349,7 @@ function Dashboard() {
 
 
 
-          {/* 🥉 TIER 3: MUTATION ANALYTICS HUD */}
+          
           <div ref={hudRef} className="mutation-hud animate-delay-5 in-view">
 
             {/* 1. CODE CHURN & IMPACT */}
@@ -1337,11 +1387,19 @@ function Dashboard() {
                 </div>
 
                 <div style={{ position: 'relative', width: '100px', height: '100px' }}>
-                  <svg className="radial-progress-svg">
+                  <svg className="radial-progress-svg" viewBox="0 0 100 100">
+                    <defs>
+                      <linearGradient id="healthGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#38bdf8" />
+                        <stop offset="50%" stopColor="#818cf8" />
+                        <stop offset="100%" stopColor="#c084fc" />
+                      </linearGradient>
+                    </defs>
                     <circle className="radial-bg" cx="50" cy="50" r="45"></circle>
                     <circle
                       className="radial-active"
                       cx="50" cy="50" r="45"
+                      stroke="url(#healthGradient)"
                       style={{
                         strokeDasharray: '282.7',
                         strokeDashoffset: (282.7 - (282.7 * (grandTotalFilesChanged / (workbenchMetrics.totalCount * 5 || 1)))) // Estimating 5 files per plugin avg for goal
@@ -1368,6 +1426,42 @@ function Dashboard() {
             </div>
 
           </div>
+
+          
+          <div className="reveal-node animate-delay-5" style={{ marginTop: '32px' }}>
+            <div className="hub-briefing" style={{ marginBottom: '24px' }}>
+              <div className="system-status-badge">
+                <span className="pulse-dot danger"></span> Immediate Action Required
+              </div>
+              <h2 className="hub-title" style={{ fontSize: '24px' }}>High Impact <span className="mono text-accent">Targets</span></h2>
+              <p className="hub-subtitle">Top 5 entities identified with maximum modernization ROI.</p>
+            </div>
+            
+            <div className="task-grid">
+              {highImpactTargets.map((target, idx) => (
+                <div 
+                  key={target.pluginName} 
+                  className="glass-card tactical-task-card kinetic-card in-view" 
+                  onClick={() => handleDrillDown(target.pluginName)} 
+                  style={{ cursor: 'pointer', '--delay': `${idx * 100}ms` } as React.CSSProperties}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                    <div className="mono" style={{ opacity: 0.3, fontSize: '20px' }}>0{idx + 1}</div>
+                    <div>
+                      <span className="task-plugin-name" style={{ fontSize: '16px' }}>{target.pluginName}</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                        <span className="hero-desc" style={{ fontSize: '11px', color: 'var(--accent-secondary)' }}>Impact Score: {target.impactScore.toFixed(0)}</span>
+                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }}></div>
+                        <span className="hero-desc" style={{ fontSize: '11px' }}>{target.insight.surgical.drift.gap} Drift</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="task-badge success" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>HIGH ROI</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       );
     }
@@ -1589,7 +1683,7 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* 🥉 TIER 2: ANALYTICAL & REMEDIATION DIRECTIVES */}
+            
             <div className="action-grid" style={{ marginTop: '20px' }}>
               <div className="action-column">
                 <h4 style={{ marginBottom: '20px' }}>EXECUTIVE_SUMMARY // THE CONTEXT</h4>
@@ -1639,9 +1733,8 @@ function Dashboard() {
           </div>
 
           <div style={{ marginTop: '60px' }}>
-            <h3 className="mono" style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '30px', letterSpacing: '3px', textAlign: 'center' }}>🥉 TIER 3: TECHNICAL TELEMETRY & EVIDENCE</h3>
 
-            {/* 🥉 TIER 3: SUPPORTING TELEMETRY GRID */}
+            
             <div className="summary-grid" style={{ marginBottom: '40px' }}>
               <div className="telemetry-module reveal-node animate-delay-1">
                 <div className="telemetry-icon-box">
@@ -1692,7 +1785,6 @@ function Dashboard() {
               </div>
             </div>
 
-            {/* 🥉 TIER 3: TECHNICAL EVIDENCE (CHARTS REMOVED PER DIRECTIVE) */}
 
             <div className="glass-card liquid-glass reveal-node" style={{ '--delay': '600ms', padding: '24px' } as React.CSSProperties}>
               <h3 className="mono" style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px', textTransform: 'uppercase' }}>Diagnostic Findings</h3>
@@ -1818,7 +1910,7 @@ function Dashboard() {
       const archSteps = [
         {
           num: 1, title: "Data Acquisition", colorVar: "var(--accent-secondary)",
-          imgSrc: "src/assets/data_acquisition_blueprint.png",
+          imgSrc: dataAcquisitionImage,
           desc: "The application uses the `metadata-plugin-modernizer` repository via automated GitHub Actions as the primary data source. JSON and CSV files are fetched directly during the build process.",
           icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/><path d="M3.05 11a9 9 0 1 1 .5 4"/><polyline points="3 16 3 11 8 11"/></svg>
         },
@@ -1839,7 +1931,7 @@ function Dashboard() {
         },
         {
           num: 5, title: "Visualization Layer", colorVar: "var(--accent-primary)",
-          imgSrc: "/visualization_layer_blueprint.png",
+          imgSrc: visualizationLayerImage,
           desc: "Metrics are painted across highly interactive Apache ECharts, visualizing priority rankings, continuous integrations breakdowns, and distribution vectors.",
           icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>
         },
@@ -2096,7 +2188,7 @@ function Dashboard() {
                     a.click();
                   }}
                 >
-                  GENERATE MASTER SCRIPT (.SH)
+                  GENERATE_MASTER_SCRIPT (.SH)
                 </button>
                 <button className="tab-btn mini danger" onClick={() => setSurgeryQueue([])}>CLEAR</button>
               </div>

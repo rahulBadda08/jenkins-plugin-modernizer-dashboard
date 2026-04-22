@@ -70,26 +70,26 @@ const PieChart: React.FC<PieChartProperties> = ({
       title: {
         text: title,
         left: "center",
-        top: 10,
+        top: 0,
         textStyle: { 
-          fontSize: 18, 
+          fontSize: 16, 
           fontWeight: 800, 
           color: theme === 'dark' ? "#F3F4F6" : "#0f172a", 
           fontFamily: 'Outfit, sans-serif', 
-          letterSpacing: 1 
+          letterSpacing: 0.5 
         },
       },
       tooltip: {
         trigger: 'item',
         backgroundColor: theme === 'dark' ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
         borderColor: theme === 'dark' ? "rgba(255,255,255,0.1)" : "rgba(0, 0, 0, 0.1)",
-        textStyle: { color: theme === 'dark' ? "#FFF" : "#0f172a", fontFamily: 'Inter, sans-serif', fontSize: 13 },
+        textStyle: { color: theme === 'dark' ? "#FFF" : "#0f172a", fontFamily: 'Inter, sans-serif', fontSize: 12 },
         borderRadius: 12,
-        padding: 16,
+        padding: 12,
         backdropFilter: 'blur(12px)',
         formatter: (params: any) => {
           const item = data[params.dataIndex];
-          const insight = item.insight ? `<div style="margin-top: 8px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 8px; white-space: normal; line-height: 1.4; max-width: 220px;">${item.insight}</div>` : '';
+          const insight = item.insight ? `<div style="margin-top: 8px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 8px; white-space: normal; line-height: 1.4; max-width: 200px;">${item.insight}</div>` : '';
           return `<div style="font-family: 'Inter', sans-serif;">
                     <div style="font-weight: 700;">${params.name}</div>
                     <div style="font-family: 'JetBrains Mono', monospace; margin-top: 4px; color: #2b8a3e;">${params.value} ENTITIES <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'}; font-size: 10px;">(${params.percent}%)</span></div>
@@ -101,21 +101,22 @@ const PieChart: React.FC<PieChartProperties> = ({
         orient: 'horizontal',
         bottom: '0%',
         left: 'center',
-        textStyle: { color: theme === 'dark' ? '#94a3b8' : '#475569', fontFamily: 'Inter, sans-serif', fontSize: 11 },
-        icon: 'circle'
+        textStyle: { color: theme === 'dark' ? '#94a3b8' : '#475569', fontFamily: 'Inter, sans-serif', fontSize: 10 },
+        icon: 'circle',
+        itemGap: 10
       },
       series: [
         {
           name: 'Diagnosis',
           type: 'pie',
-          radius: ['25%', '70%'], // Enlarged radius
-          center: ['50%', '50%'], // Perfectly centered for equal top and bottom padding
-          roseType: 'area', // Implement Nightingale Rose Chart
+          radius: ['20%', '65%'], 
+          center: ['50%', '50%'], 
+          roseType: 'area', 
           avoidLabelOverlap: true,
           itemStyle: {
             borderRadius: 12,
             borderColor: theme === 'dark' ? 'rgba(3, 7, 18, 1)' : 'rgba(248, 250, 252, 1)',
-            borderWidth: 4
+            borderWidth: 3
           },
           label: { 
             show: true, 
@@ -124,14 +125,14 @@ const PieChart: React.FC<PieChartProperties> = ({
             rich: {
               name: {
                 fontFamily: 'Outfit, sans-serif',
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: 700,
                 color: theme === 'dark' ? '#F3F4F6' : '#0f172a',
-                padding: [0, 0, 4, 0]
+                padding: [0, 0, 2, 0]
               },
               value: {
                 fontFamily: '"JetBrains Mono", monospace',
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 800,
                 color: theme === 'dark' ? '#38d1ff' : '#003056'
               }
@@ -140,7 +141,7 @@ const PieChart: React.FC<PieChartProperties> = ({
           emphasis: {
             label: {
               show: true,
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: 800,
             },
             itemStyle: {

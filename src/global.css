@@ -21,18 +21,18 @@
   --accent-amber: #fab005;
   --accent-neon: #82c91e;
 
-  --card-bg: rgba(37, 38, 43, 0.4);
-  --glass-bg: rgba(37, 38, 43, 0.6);
+  --card-bg: rgba(20, 25, 45, 0.3); /* Slightly bluer, more transparent */
+  --glass-bg: rgba(25, 30, 50, 0.5); /* Bluer tint for weather effect */
   --dropdown-bg: rgba(30, 31, 35, 0.95);
   --input-bg: rgba(25, 26, 30, 0.4);
   --border-subtle: rgba(255, 255, 255, 0.08);
   --card-border: rgba(255, 255, 255, 0.06);
   
-  --card-radius: 20px; /* Fluid professional radius */
-  --glass-refraction: rgba(255, 255, 255, 0.08);
-  --glass-blur: 24px;
+  --card-radius: 28px; /* Softer, more organic radius from weather app */
+  --glass-refraction: rgba(255, 255, 255, 0.12);
+  --glass-blur: 40px; /* Much deeper blur for a cloudier look */
 
-  --glass-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  --glass-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
   --hover-shadow: 0 20px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(var(--jenkins-blue-rgb, 56, 209, 255), 0.2);
 
   --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -114,12 +114,10 @@ body, table, th, td, input, select, textarea, button {
 }
 
 body {
-  background-image:
-    radial-gradient(1200px circle at var(--mouse-x, 0px) var(--mouse-y, 0px), rgba(59, 130, 246, 0.08), transparent 80%),
-    radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.1) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, rgba(6, 182, 212, 0.1) 0px, transparent 50%);
+  background: #0f172a;
+  background-image: 
+    radial-gradient(at 0% 0%, rgba(30, 41, 59, 0.5) 0px, transparent 50%),
+    radial-gradient(at 100% 0%, rgba(15, 23, 42, 0.5) 0px, transparent 50%);
   background-attachment: fixed;
   position: relative;
   cursor: none !important; /* Hide default cursor globally */
@@ -130,19 +128,7 @@ body {
   cursor: none !important;
 }
 
-body::after {
-  content: '';
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-image: url("https://grainy-gradients.vercel.app/noise.svg");
-  opacity: 0.05;
-  pointer-events: none;
-  z-index: 1000;
-  filter: contrast(150%) brightness(100%);
-}
+
 
 #root {
   min-height: 100vh;

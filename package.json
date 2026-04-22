@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://github.com/rahulBadda08/jenkins-plugin-modernizer-dashboard",
+  "homepage": "https://rahulBadda08.github.io/jenkins-plugin-modernizer-dashboard/",
   "scripts": {
     "predev": "node scripts/fetchData.mjs",
     "dev": "vite",
