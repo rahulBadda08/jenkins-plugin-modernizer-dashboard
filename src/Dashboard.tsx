@@ -1855,7 +1855,7 @@ function Dashboard() {
       );
     }
 
-    if (currentlyActiveTab === "Architecture") {
+    if (currentlyActiveTab === "Methodology") {
       const PHASES = [
         { range: [1, 1], label: 'Data Acquisition', cls: 'acquisition' },
         { range: [2, 3], label: 'Processing Layer', cls: 'processing' },
@@ -1920,76 +1920,113 @@ function Dashboard() {
       ];
 
       return (
-        <div className="arch-tab-root animate-fade-up" key="architecture">
+        <div className="tab-content animate-fade-up" key="methodology">
+          <div className="glass-card reveal-node" style={{ padding: '60px' }}>
+            <p className="hero-label">SYSTEM_INTELLIGENCE_SPEC</p>
+            <h2 className="title" style={{ marginBottom: '40px' }}>Architecture & <span className="text-accent">Methodology</span></h2>
+            
+            {/* ── SECTION 1: ARCHITECTURE ── */}
+            <div style={{ marginBottom: '80px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '20px' }}>
+                 <div style={{ width: '30px', height: '2px', background: 'var(--accent-primary)' }}></div>
+                 <h3 className="mono" style={{ fontSize: '18px', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>01. Engineering Pipeline</h3>
+              </div>
+              <p className="arch-intro" style={{ textAlign: 'left', maxWidth: '100%' }}>
+                This project transforms Jenkins plugin modernization metadata into actionable visual insights using a build-time data processing approach.
+              </p>
+              <div className="arch-diagram" style={{ marginBottom: '60px' }}>
+                <img src={architectureImage} alt="Static Data Pipeline Architecture" style={{ maxWidth: '100%', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }} />
+              </div>
 
-          {/* Header */}
-          <h2 className="arch-header reveal-node">
-            Engine <span className="text-accent">Architecture</span>
-          </h2>
-          <p className="arch-intro reveal-node">
-            This project follows a static, build-time data processing approach to transform Jenkins plugin modernization metadata into actionable visual insights.
-          </p>
-
-          {/* Pipeline Diagram */}
-          <div className="arch-diagram reveal-node">
-            <img src={architectureImage} alt="Static Data Pipeline Architecture" />
-          </div>
-
-          {/*
-            FLOWBITE VERTICAL TIMELINE
-            HTML pattern from https://flowbite.com/docs/components/timeline/#vertical-timeline
-            ol.relative.border-s  →  .fb-timeline
-            li.mb-10.ms-6         →  .fb-timeline-item
-            span.absolute.-start-3.ring-8  →  .fb-node
-            time badge, h3, p     →  .fb-phase-badge, .fb-item-title, .fb-item-body
-          */}
-          <ol className="fb-timeline">
-            {archSteps.map((item) => {
-              const phaseStart = PHASES.find(p => p.range[0] === item.num);
-              return (
-                <React.Fragment key={item.num}>
-                  {phaseStart && (
-                    <div className="fb-phase-divider">
-                      <span className={`fb-phase-label ${phaseStart.cls}`}>{phaseStart.label}</span>
-                    </div>
-                  )}
-                  <li
-                    className="fb-timeline-item"
-                    style={{ '--node-color': item.colorVar } as React.CSSProperties}
-                  >
-                    {/* ── Flowbite Node: span.absolute.-start-3.ring-8 ── */}
-                    <span className="fb-node" title={item.title}>
-                      <span className="fb-node-icon" style={{ color: 'currentColor' }}>{item.icon}</span>
-                    </span>
-
-                    {/* ── Flowbite Card body ── */}
-                    <div className="fb-card">
-                      {/* Flowbite: <time> badge pill */}
-                      <span className="fb-phase-badge">[STEP_{item.num < 10 ? `0${item.num}` : item.num}]</span>
-
-                      {/* Flowbite: h3 title */}
-                      <h3 className="fb-item-title">{item.title}</h3>
-
-                      {/* Blueprint image (optional) */}
-                      {item.imgSrc && (
-                        <div className="fb-blueprint">
-                          <img src={item.imgSrc} alt={`${item.title} Blueprint`} />
+              <ol className="fb-timeline">
+                {archSteps.map((item) => {
+                  const phaseStart = PHASES.find(p => p.range[0] === item.num);
+                  return (
+                    <React.Fragment key={item.num}>
+                      {phaseStart && (
+                        <div className="fb-phase-divider">
+                          <span className={`fb-phase-label ${phaseStart.cls}`}>{phaseStart.label}</span>
                         </div>
                       )}
+                      <li className="fb-timeline-item" style={{ '--node-color': item.colorVar } as React.CSSProperties}>
+                        <span className="fb-node" title={item.title}>
+                          <span className="fb-node-icon" style={{ color: 'currentColor' }}>{item.icon}</span>
+                        </span>
+                        <div className="fb-card">
+                          <span className="fb-phase-badge">[STEP_{item.num < 10 ? `0${item.num}` : item.num}]</span>
+                          <h3 className="fb-item-title">{item.title}</h3>
+                          {item.imgSrc && (
+                            <div className="fb-blueprint">
+                              <img src={item.imgSrc} alt={`${item.title} Blueprint`} />
+                            </div>
+                          )}
+                          <p className="fb-item-body" dangerouslySetInnerHTML={{ __html: item.desc.replace(/`([^`]+)`/g, '<code>$1</code>') }} />
+                        </div>
+                      </li>
+                    </React.Fragment>
+                  );
+                })}
+              </ol>
+            </div>
 
-                      {/* Flowbite: p description */}
-                      <p
-                        className="fb-item-body"
-                        dangerouslySetInnerHTML={{
-                          __html: item.desc.replace(/`([^`]+)`/g, '<code>$1</code>')
-                        }}
-                      />
-                    </div>
-                  </li>
-                </React.Fragment>
-              );
-            })}
-          </ol>
+            <div style={{ width: '100%', height: '1px', background: 'rgba(255,255,255,0.1)', margin: '80px 0' }}></div>
+
+            {/* ── SECTION 2: DATA DICTIONARY ── */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '40px' }}>
+                 <div style={{ width: '30px', height: '2px', background: 'var(--accent-amber)' }}></div>
+                 <h3 className="mono" style={{ fontSize: '18px', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>02. Telemetry Methodology</h3>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '40px', textAlign: 'left' }}>
+              <div className="method-module">
+                <h3 className="mono" style={{ color: 'var(--accent-secondary)', fontSize: '18px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+                  LTS Baseline Logic
+                </h3>
+                <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
+                  The system anchors every metric against the current **Jenkins LTS Baseline** (currently <code className="mono">{LTS_BASELINE}</code>). 
+                  Any plugin falling below this line is flagged for **Ecosystem Drift**.
+                </p>
+              </div>
+
+              <div className="method-module">
+                <h3 className="mono" style={{ color: 'var(--accent-amber)', fontSize: '18px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+                  Criticality Matrix
+                </h3>
+                <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
+                  The Drift Gap is calculated by minor version distance:
+                  <ul style={{ marginTop: '12px', listStyle: 'none', padding: 0 }}>
+                    <li>🔴 <strong>Critical</strong>: Gap &gt; 50 releases.</li>
+                    <li>🟠 <strong>Moderate</strong>: Gap &gt; 20 releases.</li>
+                    <li>🔵 <strong>Optimized</strong>: Within 20 releases.</li>
+                  </ul>
+                </p>
+              </div>
+
+              <div className="method-module">
+                <h3 className="mono" style={{ color: 'var(--accent-green)', fontSize: '18px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+                  Health Index Calculation
+                </h3>
+                <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
+                  A plugin starts with a score of <strong>100</strong>. A deduction is applied for:
+                  <ul style={{ marginTop: '12px', listStyle: 'none', padding: 0 }}>
+                    <li style={{ marginBottom: '4px' }}>📉 <strong>-25</strong>: Failed migration.</li>
+                    <li style={{ marginBottom: '4px' }}>🧬 <strong>-15</strong>: Missing BOM.</li>
+                    <li style={{ marginBottom: '4px' }}>🛡️ <strong>-15</strong>: Security scan failure.</li>
+                  </ul>
+                </p>
+              </div>
+
+              <div className="method-module">
+                <h3 className="mono" style={{ color: 'var(--accent-neon)', fontSize: '18px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '12px' }}>
+                  Data Integrity
+                </h3>
+                <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
+                  Every statistic is derived from <code>aggregated_migrations.json</code>. This dashboard acts as a visual interpretation layer for existing telemetry.
+                </p>
+              </div>
+            </div>
+
+          </div>
         </div>
       );
     }
@@ -2055,7 +2092,7 @@ function Dashboard() {
           <div className="flex flex-col items-center md:items-start text-center md:text-left pt-2 md:pt-4">
             <h1 className="title font-black leading-[1.1] tracking-tight mb-6 text-3xl sm:text-4xl md:text-5xl lg:text-[64px]" style={{ color: 'var(--text-primary)' }}>
               Jenkins Plugin <br className="hidden md:block" />
-              <span className="plugin-name" style={{ backgroundImage: 'linear-gradient(45deg, var(--accent-primary), var(--accent-neon))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>Modernization Insights</span>
+              <span className="plugin-name" style={{ backgroundImage: 'linear-gradient(45deg, var(--accent-primary), var(--accent-neon))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', display: 'inline-block' }}>Modernization Insight</span>
             </h1>
 
             <div className="flex flex-col gap-3 relative border-t md:border-t-0 md:border-l-[3px] border-white/20 pt-5 md:pt-0 md:pl-6 max-w-3xl">
@@ -2066,7 +2103,7 @@ function Dashboard() {
               </p>
 
               <p className="text-[color:var(--accent-secondary)] text-xs sm:text-sm md:text-[13px] font-mono uppercase tracking-[0.2em] font-bold mt-1 opacity-90">
-                Turning modernization data into actionable insights for Jenkins maintainers
+                Turning modernization data into an actionable insight for the Jenkins maintainer
               </p>
             </div>
           </div>
@@ -2094,10 +2131,10 @@ function Dashboard() {
           Explorer
         </button>
         <button
-          onClick={() => setCurrentlyActiveTab("Architecture")}
-          className={`tab-btn ${currentlyActiveTab === "Architecture" ? "active" : ""}`}
+          onClick={() => setCurrentlyActiveTab("Methodology")}
+          className={`tab-btn ${currentlyActiveTab === "Methodology" ? "active" : ""}`}
         >
-          Architecture
+          Methodology
         </button>
       </div>
 

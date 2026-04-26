@@ -201,6 +201,53 @@ export default function DataExplorer({
       window.alert("Export Error: " + (err.message || 'The snapshot engine encountered an issue rendering the spreadsheet.'));
     }
   };
+  const exportToCSV = () => {
+    try {
+      const headers = ['PLUGIN_NAME', 'MIGRATION_STATUS', 'PR_STATUS', 'REPOSITORY_ACTION_LINK', 'LAST_ANALYSIS_DATE'];
+      const rows = filteredPlugins.map(plugin => {
+        const migration = plugin.migrations?.[0];
+        const prUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
+        return [
+          `"${plugin.pluginName}"`,
+          `"${(migration?.migrationStatus || 'UNKNOWN').toUpperCase()}"`,
+          `"${(migration?.pullRequestStatus || 'UNKNOWN').replace("_", " ").toUpperCase()}"`,
+          `"${prUrl}"`,
+          `"${formatTimestamp(migration?.timestamp || "")}"`
+        ];
+      });
+
+      const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'Jenkins_Telemetry_Snapshot.csv');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      console.error("CSV Generation Error:", err);
+      window.alert("Export Error: " + (err.message || 'CSV generation failed.'));
+    }
+  };
+
+  const exportToJSON = () => {
+    try {
+      const blob = new Blob([JSON.stringify(filteredPlugins, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'Jenkins_Telemetry_Snapshot.json');
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err: any) {
+      console.error("JSON Generation Error:", err);
+      window.alert("Export Error: " + (err.message || 'JSON generation failed.'));
+    }
+  };
 
   return (
     <div className="glass-card reveal-node animate-fade-up" style={{ padding: isMobile ? '20px' : '40px' }}>
@@ -217,14 +264,32 @@ export default function DataExplorer({
           </div>
         </div>
         
-        <button 
-          onClick={exportToExcel}
-          className="tab-btn" 
-          style={{ width: isMobile ? '100%' : 'auto', display: 'flex', justifyContent: 'center' }}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '8px' }}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          DOWNLOAD
-        </button>
+        <div style={{ display: 'flex', gap: '10px', width: isMobile ? '100%' : 'auto', flexWrap: 'wrap' }}>
+          <button 
+            onClick={exportToExcel}
+            className="tab-btn mini" 
+            style={{ flex: 1, display: 'flex', justifyContent: 'center', fontSize: '11px' }}
+            title="Export to Microsoft Excel"
+          >
+            XLSX
+          </button>
+          <button 
+            onClick={exportToCSV}
+            className="tab-btn mini" 
+            style={{ flex: 1, display: 'flex', justifyContent: 'center', fontSize: '11px' }}
+            title="Export to CSV"
+          >
+            CSV
+          </button>
+          <button 
+            onClick={exportToJSON}
+            className="tab-btn mini" 
+            style={{ flex: 1, display: 'flex', justifyContent: 'center', fontSize: '11px' }}
+            title="Export to JSON"
+          >
+            JSON
+          </button>
+        </div>
       </div>
 
       {/* 4. THE CONSOLE CONTROLS */}
