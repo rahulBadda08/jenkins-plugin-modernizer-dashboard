@@ -413,9 +413,9 @@
 /* Visualization Grids */
 .charts-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 32px;
-  margin-top: 40px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 450px), 1fr));
+  gap: 30px;
+  margin-top: 20px;
 }
 
 .chart-card {
@@ -439,12 +439,35 @@
   }
 
   .title {
-    font-size: 42px;
+    font-size: 36px;
   }
 
   .summary-grid {
     grid-template-columns: repeat(2, 1fr);
-    gap: 20px;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 15px;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card {
+    padding: 15px;
+    min-height: auto;
+  }
+
+  .title {
+    font-size: 28px;
+  }
+
+  .marquee-wrapper {
+    display: none; /* Hide marquee on small screens to save vertical space */
   }
 }
 
@@ -2763,4 +2786,183 @@
   .fb-phase-divider { margin-left: 16px; }
 }
 
+
+
+
+/* ══════════════════════════════════════════════════════════
+   V52: AMBIENT HIGH-IMPACT ACTION CENTER
+   ══════════════════════════════════════════════════════════ */
+
+.system-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 16px;
+  border-radius: 100px;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  box-shadow: 
+    0 4px 15px rgba(0, 0, 0, 0.2),
+    inset 0 1px 1px rgba(255, 255, 255, 0.05);
+}
+
+.system-status-badge .pulse-dot.danger {
+  background-color: var(--accent-red);
+  box-shadow: 0 0 15px var(--accent-red);
+}
+
+.system-status-badge .pulse-dot.warning {
+  background-color: var(--accent-amber);
+  box-shadow: 0 0 15px var(--accent-amber);
+}
+
+.hub-title {
+  font-family: var(--display);
+  font-size: clamp(22px, 5vw, 36px);
+  font-weight: 900;
+  margin: 18px 0 10px;
+  line-height: 1;
+  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  background: linear-gradient(to right, #fff, rgba(255, 255, 255, 0.7));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hub-subtitle {
+  font-size: 14px;
+  opacity: 0.6;
+  max-width: 550px;
+  margin-bottom: 40px;
+  letter-spacing: 0.01em;
+}
+
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 24px;
+}
+
+.tactical-task-card {
+  position: relative;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-left: 2px solid var(--accent-secondary);
+  border-radius: 20px;
+  padding: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Ambient glow container */
+.tactical-task-card::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), transparent, rgba(var(--accent-secondary-rgb), 0.2));
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: destination-out;
+  pointer-events: none;
+}
+
+.tactical-task-card:hover {
+  transform: translateY(-8px) scale(1.02);
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(var(--accent-secondary-rgb), 0.3);
+  box-shadow: 
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 30px rgba(var(--accent-secondary-rgb), 0.15);
+}
+
+.task-plugin-name {
+  font-family: var(--display);
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.task-badge {
+  font-family: var(--mono);
+  font-size: 8px;
+  font-weight: 900;
+  padding: 4px 10px;
+  border-radius: 6px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  background: rgba(var(--accent-secondary-rgb), 0.1);
+  color: var(--accent-secondary);
+  border: 1px solid rgba(var(--accent-secondary-rgb), 0.2);
+  box-shadow: 0 0 10px rgba(var(--accent-secondary-rgb), 0.05);
+}
+
+.task-badge.success {
+  background: rgba(16, 185, 129, 0.06);
+  color: var(--accent-green);
+  border-color: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.05);
+}
+
+.tactical-task-card .mono {
+  transition: all 0.4s ease;
+}
+
+.tactical-task-card:hover .mono {
+  color: #fff !important;
+  opacity: 0.4 !important;
+  transform: translateX(2px);
+}
+
+/* Professional Data Rhythm */
+.task-telemetry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.telemetry-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.telemetry-item svg {
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+}
+
+.tactical-task-card:hover .telemetry-item svg {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .task-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  .tactical-task-card {
+    padding: 24px;
+  }
+}
 

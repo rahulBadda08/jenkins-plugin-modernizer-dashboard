@@ -1216,7 +1216,7 @@ function Dashboard() {
 
 
         
-          <div ref={chartRef} className="charts-grid reveal-node animate-delay-4" style={{ marginTop: '0px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '30px' }}>
+          <div ref={chartRef} className="charts-grid reveal-node animate-delay-4">
             <div className="glass-card chart-card">
               <PieChart
                 data={topPieData}
@@ -1393,20 +1393,26 @@ function Dashboard() {
                   key={target.pluginName} 
                   className="glass-card tactical-task-card kinetic-card in-view" 
                   onClick={() => handleDrillDown(target.pluginName)} 
-                  style={{ cursor: 'pointer', '--delay': `${idx * 100}ms` } as React.CSSProperties}
+                  style={{ '--delay': `${idx * 100}ms` } as React.CSSProperties}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                    <div className="mono" style={{ opacity: 0.3, fontSize: '20px' }}>0{idx + 1}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
+                    <div className="mono" style={{ opacity: 0.15, fontSize: '28px', fontWeight: 900 }}>{idx + 1}</div>
                     <div>
-                      <span className="task-plugin-name" style={{ fontSize: '16px' }}>{target.pluginName}</span>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
-                        <span className="hero-desc" style={{ fontSize: '11px', color: 'var(--accent-secondary)' }}>Impact Score: {target.impactScore.toFixed(0)}</span>
-                        <div style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'rgba(255,255,255,0.2)' }}></div>
-                        <span className="hero-desc" style={{ fontSize: '11px' }}>{target.insight.surgical.drift.gap} Drift</span>
+                      <span className="task-plugin-name">{target.pluginName}</span>
+                      <div className="task-telemetry">
+                        <div className="telemetry-item">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="3"><path d="M12 2v20M2 12h20" /></svg>
+                          <span className="hero-desc mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', fontWeight: 700, letterSpacing: '0.5px' }}>{target.impactScore.toFixed(0)} ROI</span>
+                        </div>
+                        <div style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.08)' }}></div>
+                        <div className="telemetry-item">
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="3"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                          <span className="hero-desc mono" style={{ fontSize: '10px', opacity: 0.5 }}>{target.insight.surgical.drift.gap} DRIFT</span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <div className="task-badge success" style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.2)' }}>HIGH ROI</div>
+                  <div className="task-badge success">CRITICAL_TARGET</div>
                 </div>
               ))}
             </div>
