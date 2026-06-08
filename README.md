@@ -74,7 +74,11 @@ npm run dev
 
 ### Building for Production
 ```bash
+# Standard build for GitHub Pages
 npm run build
+
+# Custom build for stats.jenkins.io (example)
+VITE_BASE_PATH=/stats/plugin-modernizer/ npm run build
 ```
 
 ---
