@@ -360,6 +360,82 @@ function Dashboard() {
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');
 
+  // ── FULL SCREEN ENGINE ──
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement ||
+        (document as any).mozFullScreenElement ||
+        (document as any).msFullscreenElement
+      ));
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", handleFullscreenChange);
+    document.addEventListener("mozfullscreenchange", handleFullscreenChange);
+    document.addEventListener("MSFullscreenChange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", handleFullscreenChange);
+      document.removeEventListener("MSFullscreenChange", handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = (targetElem?: HTMLElement | null) => {
+    const elem = (targetElem || document.documentElement) as any;
+    const isDocFS = !!(
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      (document as any).mozFullScreenElement ||
+      (document as any).msFullscreenElement
+    );
+
+    if (!isDocFS) {
+      if (elem.requestFullscreen) {
+        elem.requestFullscreen().catch((err: any) => console.warn("Fullscreen error:", err));
+      } else if (elem.webkitRequestFullscreen) {
+        elem.webkitRequestFullscreen();
+      } else if (elem.mozRequestFullScreen) {
+        elem.mozRequestFullScreen();
+      } else if (elem.msRequestFullscreen) {
+        elem.msRequestFullscreen();
+      }
+    } else {
+      const doc = document as any;
+      if (doc.exitFullscreen) {
+        doc.exitFullscreen().catch(() => {});
+      } else if (doc.webkitExitFullscreen) {
+        doc.webkitExitFullscreen();
+      } else if (doc.mozCancelFullScreen) {
+        doc.mozCancelFullScreen();
+      } else if (doc.msExitFullscreen) {
+        doc.msExitFullscreen();
+      }
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeElement = document.activeElement;
+      const tagName = activeElement?.tagName?.toLowerCase();
+      if (tagName === "input" || tagName === "textarea" || (activeElement as HTMLElement)?.isContentEditable) {
+        return;
+      }
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   const handleDrillDown = (pluginName: string) => {
     setCurrentlyActiveTab(pluginName);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1132,13 +1208,44 @@ function Dashboard() {
       <div className="command-hub-right-group" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'wrap' }}>
 
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
           <div style={{ textAlign: 'right' }}>
             <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', opacity: 0.6, letterSpacing: '1px' }}>ECOSYSTEM_COVERAGE</div>
             <div className="mono" style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent-neon)' }}>
               {Math.round((filteredEcosystem.length / allPluginsData.length) * 100)}%
             </div>
           </div>
+
+          {/* Full Screen Switcher */}
+          <button
+            onClick={() => toggleFullscreen()}
+            className={`tab-btn clickable ${isFullscreen ? 'active-fullscreen' : ''}`}
+            style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: isFullscreen ? 'rgba(56, 209, 255, 0.2)' : 'rgba(var(--text-primary-rgb), 0.05)',
+              border: isFullscreen ? '1px solid var(--accent-neon)' : '1px solid var(--card-border)',
+              color: isFullscreen ? 'var(--accent-neon)' : 'var(--text-primary)',
+              boxShadow: isFullscreen ? '0 0 16px rgba(130, 201, 30, 0.4)' : 'none',
+              transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              cursor: 'none'
+            }}
+            title={isFullscreen ? 'Exit Full Screen (Key: F)' : 'Open in Full Screen (Key: F)'}
+          >
+            {isFullscreen ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+            )}
+          </button>
 
           {/* Cinematic Theme Switcher (V40) */}
           <button
@@ -2201,6 +2308,30 @@ function Dashboard() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 🖥️ FULL SCREEN FLOATING INDICATOR */}
+      {isFullscreen && (
+        <div className="fullscreen-indicator-toast">
+          <span className="pulse-dot warning"></span>
+          <span>FULL SCREEN ACTIVE</span>
+          <button
+            onClick={() => toggleFullscreen()}
+            style={{
+              background: 'rgba(255,255,255,0.12)',
+              border: '1px solid rgba(255,255,255,0.2)',
+              borderRadius: '8px',
+              color: 'var(--text-primary)',
+              padding: '4px 10px',
+              fontSize: '11px',
+              fontWeight: 'bold',
+              cursor: 'none',
+              marginLeft: '6px'
+            }}
+          >
+            EXIT [F]
+          </button>
         </div>
       )}
 
