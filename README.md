@@ -5,12 +5,12 @@
 
 A high-fidelity, public analytics dashboard for visualizing the health and modernization status of the Jenkins plugin ecosystem. This project consumes the dataset produced by the [Jenkins Plugin Modernizer Tool](https://github.com/jenkins-infra/plugin-modernizer-tool) and presents it as an actionable insight for the Jenkins maintainer.
 
-## 🚀 Live Dashboard
+##  Live Dashboard
 **[View the Jenkins Plugin Modernizer Dashboard](https://rahulBadda08.github.io/jenkins-plugin-modernizer-dashboard/)**
 
 ---
 
-## 🎯 Project Goal (GSoC 2026)
+##  Project Goal (GSoC 2026)
 This project is built according to the [Jenkins GSoC 2026 "Plugin Modernizer Stats Visualization" Roadmap](https://www.jenkins.io/projects/gsoc/2026/project-ideas/plugin-modernizer-stats-visualization/):
 - **Build-Time Ingestion**: Pulls raw metadata from `jenkins-infra/metadata-plugin-modernizer` during the build process to ensure a fast, static experience.
 - **Actionable Visualization**: Provides ecosystem-wide health metrics and deep-dives into an individual plugin (Parent POM, BOM, Test Framework).
@@ -18,7 +18,7 @@ This project is built according to the [Jenkins GSoC 2026 "Plugin Modernizer Sta
 - **Automated Operation**: Fully automated CI/CD pipeline for a daily data update and deployment.
 
 
-## 🏗️ Architecture
+##  Architecture
 The dashboard follows a "Static Intelligence" pattern:
 1. **Fetch**: A Node.js script (`scripts/fetchData.mjs`) discovers and downloads hundreds of plugin reports from the Jenkins infra metadata repository.
 2. **Compile**: Data is aggregated and validated into a single optimized JSON bundle in `src/data/all_plugins.json`.
@@ -34,7 +34,7 @@ The dashboard follows a "Static Intelligence" pattern:
 
 ---
 
-## 🤝 Contribution Guide
+##  Contribution Guide
 We welcome contributions from the Jenkins community!
 
 ### Adding a New Visualization
@@ -50,7 +50,7 @@ If you want to change how "Priority" or "Risk" is calculated:
 
 ---
 
-## 💻 Local Development
+##  Local Development
 
 ### Prerequisites
 - Node.js (v24 or higher recommended)
