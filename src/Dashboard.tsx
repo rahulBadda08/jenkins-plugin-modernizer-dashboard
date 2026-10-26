@@ -29,6 +29,9 @@ interface Migration {
   changedFiles: number;
   pluginVersion: string;
   jenkinsVersion: string;
+  jenkinsBaseline?: string;
+  targetBaseline?: string;
+  effectiveBaseline?: string;
   timestamp: string;
   key?: string;
 }
@@ -102,6 +105,66 @@ const MarqueeHeader: React.FC<{ text: string; style?: React.CSSProperties }> = (
 // ── V49: THE SURGICAL DIRECTIVE ENGINE ──
 const LTS_BASELINE = "2.452.3";
 const OUTDATED_MINOR_THRESHOLD = 440;
+const BASELINE_WARNING_MINOR_THRESHOLD = 452;
+type BaselineBucket = "critical" | "warning" | "aligned";
+type BaselineFilterToken = "BASELINE_CRITICAL" | "BASELINE_WARNING" | "BASELINE_ALIGNED";
+
+const BASELINE_BUCKET_META: Record<BaselineBucket, { label: string; token: BaselineFilterToken; insight: string; severity: "danger" | "warning" | "success" }> = {
+  critical: {
+    label: "Critical Legacy (<2.440)",
+    token: "BASELINE_CRITICAL",
+    insight: "Plugins in this segment are behind the modernization threshold and need immediate baseline upgrades.",
+    severity: "danger"
+  },
+  warning: {
+    label: "Needs LTS Upgrade (2.440-2.451)",
+    token: "BASELINE_WARNING",
+    insight: "Plugins here are operational but still behind the 2026 LTS compatibility baseline.",
+    severity: "warning"
+  },
+  aligned: {
+    label: "Aligned (>=2.452)",
+    token: "BASELINE_ALIGNED",
+    insight: "Plugins in this segment are aligned with current Jenkins LTS baseline expectations.",
+    severity: "success"
+  }
+};
+
+const parseBaselineMinor = (version?: string): number | null => {
+  if (!version) return null;
+  const [majorRaw, minorRaw] = version.split(".");
+  const major = Number.parseInt(majorRaw || "", 10);
+  const minor = Number.parseInt(minorRaw || "", 10);
+  if (Number.isNaN(major) || Number.isNaN(minor)) return null;
+  if (major < 2) return 0;
+  return major > 2 ? 1000 + minor : minor;
+};
+
+const getMigrationBaselineMinor = (migration?: Partial<Migration>): number | null => {
+  const candidates = [
+    migration?.jenkinsVersion,
+    migration?.effectiveBaseline,
+    migration?.jenkinsBaseline,
+    migration?.targetBaseline
+  ];
+  for (const candidate of candidates) {
+    const parsed = parseBaselineMinor(candidate);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const getBaselineBucket = (minor: number | null): BaselineBucket => {
+  if (minor === null || minor < OUTDATED_MINOR_THRESHOLD) return "critical";
+  if (minor < BASELINE_WARNING_MINOR_THRESHOLD) return "warning";
+  return "aligned";
+};
+
+const getBaselineBucketByToken = (token: string): BaselineBucket | null => {
+  const entry = (Object.entries(BASELINE_BUCKET_META) as Array<[BaselineBucket, typeof BASELINE_BUCKET_META[BaselineBucket]]>)
+    .find(([, meta]) => meta.token === token);
+  return entry?.[0] || null;
+};
 
 const calculateDrift = (current: string): { gap: number; criticality: 'low' | 'med' | 'critical' } => {
   const parse = (v: string) => v.split('.').map(p => parseInt(p) || 0);
@@ -685,6 +748,10 @@ function Dashboard() {
           matchesSearch = workbenchMetrics?.roadmapList?.includes(plugin.pluginName) || false;
         } else if (globalSearch === "LEGACY_BASELINE") {
           matchesSearch = workbenchMetrics?.legacyAlignmentNames?.includes(plugin.pluginName) || false;
+        } else if (globalSearch.startsWith("BASELINE_")) {
+          const targetBucket = getBaselineBucketByToken(globalSearch);
+          const pluginBucket = getBaselineBucket(getMigrationBaselineMinor(migration));
+          matchesSearch = !!targetBucket && pluginBucket === targetBucket;
         } else {
           matchesSearch = plugin.pluginName.toLowerCase().includes(globalSearch.toLowerCase());
         }
@@ -731,6 +798,15 @@ function Dashboard() {
     setCurrentlyActiveTab("Strategic Workbench");
     // Reset the flag after the transition cycle
     setTimeout(() => { isStrategicNavRef.current = false; }, 100);
+  };
+
+  const activateBaselineBucket = (bucketLabel: string) => {
+    const bucketEntry = (Object.entries(BASELINE_BUCKET_META) as Array<[BaselineBucket, typeof BASELINE_BUCKET_META[BaselineBucket]]>)
+      .find(([, meta]) => meta.label === bucketLabel);
+    if (!bucketEntry) return;
+    setGlobalSearch(bucketEntry[1].token);
+    setCurrentlyActiveTab("Data Explorer");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   // ── ROUTING & HISTORY SYNCHRONIZATION ──
@@ -882,6 +958,48 @@ function Dashboard() {
   const grandTotalFilesChanged = useMemo(() =>
     filteredEcosystem.reduce((acc, plugin) => acc + (plugin.migrations[0].changedFiles || 0), 0)
     , [filteredEcosystem]);
+
+  const baselineHealthSummary = useMemo(() => {
+    const bucketPlugins: Record<BaselineBucket, string[]> = {
+      critical: [],
+      warning: [],
+      aligned: []
+    };
+
+    filteredEcosystem.forEach(plugin => {
+      const migration = plugin.migrations[0];
+      const bucket = getBaselineBucket(getMigrationBaselineMinor(migration));
+      bucketPlugins[bucket].push(plugin.pluginName);
+    });
+
+    const pieData = (Object.keys(BASELINE_BUCKET_META) as BaselineBucket[]).map(bucket => ({
+      name: BASELINE_BUCKET_META[bucket].label,
+      value: bucketPlugins[bucket].length,
+      insight: BASELINE_BUCKET_META[bucket].insight,
+      severity: BASELINE_BUCKET_META[bucket].severity
+    }));
+
+    const driftTargets = [...filteredEcosystem]
+      .map(plugin => {
+        const migration = plugin.migrations[0];
+        const baselineVersion = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline || "0.0";
+        const drift = calculateDrift(baselineVersion);
+        return {
+          pluginName: plugin.pluginName,
+          gap: drift.gap,
+          criticality: drift.criticality
+        };
+      })
+      .sort((a, b) => b.gap - a.gap)
+      .slice(0, 10);
+
+    return {
+      pieData,
+      driftLabels: driftTargets.map(item => item.pluginName),
+      driftData: driftTargets.map(item => item.gap),
+      driftInsights: driftTargets.map(item => `Drift score ${item.gap} from LTS ${LTS_BASELINE} (${item.criticality.toUpperCase()}).`)
+    };
+  }, [filteredEcosystem]);
 
   const { topPieData, overviewLabels, overviewData, integrityLabels, integrityData, integrityInsights } = useMemo(() => {
     const globalTagCounts: Record<string, number> = {};
@@ -1353,6 +1471,29 @@ function Dashboard() {
                 title="Modernization Intensity"
                 theme={theme}
                 rotateLabel={45}
+                onItemClick={handleDrillDown}
+              />
+            </div>
+          </div>
+
+          <div className="charts-grid reveal-node animate-delay-5" style={{ marginTop: '30px' }}>
+            <div className="glass-card chart-card">
+              <PieChart
+                data={baselineHealthSummary.pieData}
+                title="Baseline Drift Radar"
+                theme={theme}
+                onItemClick={activateBaselineBucket}
+              />
+            </div>
+            <div className="glass-card chart-card">
+              <BarChart
+                labels={baselineHealthSummary.driftLabels}
+                data={baselineHealthSummary.driftData}
+                insights={baselineHealthSummary.driftInsights}
+                colors={new Array(baselineHealthSummary.driftData.length).fill('#ef4444')}
+                title="Highest Baseline Drift Targets"
+                theme={theme}
+                rotateLabel={35}
                 onItemClick={handleDrillDown}
               />
             </div>
