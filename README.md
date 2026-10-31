@@ -25,6 +25,14 @@ The dashboard follows a "Static Intelligence" pattern:
 3. **Bundle**: Vite.js bundles this data directly into the application during the production build.
 4. **Render**: A React + TypeScript frontend uses **Apache ECharts** for high-performance telemetry visualization.
 
+### Baseline Drift Radar
+- A new **Baseline Drift Radar** view in the **Global Overview** tab segments plugins into:
+  - `Critical Legacy (<2.440)`
+  - `Needs LTS Upgrade (2.440-2.451)`
+  - `Aligned (>=2.452)`
+- The radar uses existing baseline fields (`jenkinsVersion`, `effectiveBaseline`, `jenkinsBaseline`, `targetBaseline`) with safe fallbacks for incomplete records.
+- Clicking a radar segment opens **Data Explorer** with that baseline cohort pre-filtered, while the companion chart highlights the highest drift targets for direct plugin drill-down.
+
 ## Tech Stack
 - **Framework**: React 19 + Vite 8
 - **Language**: TypeScript
