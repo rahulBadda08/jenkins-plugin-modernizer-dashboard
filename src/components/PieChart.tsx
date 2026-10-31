@@ -1,12 +1,20 @@
 import React, { useMemo } from "react";
 import ReactECharts from "echarts-for-react";
+import { escapeHtml } from "../domain/security";
 
 interface PieChartProperties {
-  data: { name: string; value: number; insight?: string; severity?: string }[];
+  data: { name: string; value: number; insight?: string; severity?: string; itemStyle?: { color?: string } }[];
   title?: string;
   colors?: string[];
   theme?: 'dark' | 'light';
   onItemClick?: (name: string) => void;
+}
+
+interface PieTooltipParam {
+  name: string;
+  value: number;
+  percent: number;
+  dataIndex: number;
 }
 
 const SEVERITY_COLORS = {
@@ -45,7 +53,7 @@ const PieChart: React.FC<PieChartProperties> = ({
     // Inject semantic coloring if severity is present
     const semanticData = data.map((item, idx) => {
       // V26.3: Prioritize passed itemStyle color for cross-tab synchronization
-      const passedColor = (item as any).itemStyle?.color;
+      const passedColor = item.itemStyle?.color;
       if (passedColor) {
         return {
           ...item,
@@ -95,12 +103,13 @@ const PieChart: React.FC<PieChartProperties> = ({
         borderRadius: 12,
         padding: 12,
         backdropFilter: 'blur(12px)',
-        formatter: (params: any) => {
-          const item = data[params.dataIndex];
-          const insight = item.insight ? `<div style="margin-top: 8px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 8px; white-space: normal; line-height: 1.4; max-width: 200px;">${item.insight}</div>` : '';
+        formatter: (params: unknown) => {
+          const p = params as PieTooltipParam;
+          const item = data[p.dataIndex];
+          const insight = item?.insight ? `<div style="margin-top: 8px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 8px; white-space: normal; line-height: 1.4; max-width: 200px;">${escapeHtml(item.insight)}</div>` : '';
           return `<div style="font-family: 'Inter', sans-serif;">
-                    <div style="font-weight: 700;">${params.name}</div>
-                    <div style="font-family: 'JetBrains Mono', monospace; margin-top: 4px; color: #2b8a3e;">${params.value} ENTITIES <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'}; font-size: 10px;">(${params.percent}%)</span></div>
+                    <div style="font-weight: 700;">${escapeHtml(p.name)}</div>
+                    <div style="font-family: 'JetBrains Mono', monospace; margin-top: 4px; color: #2b8a3e;">${escapeHtml(p.value)} ENTITIES <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'}; font-size: 10px;">(${escapeHtml(p.percent)}%)</span></div>
                     ${insight}
                   </div>`;
         }
@@ -179,8 +188,8 @@ const PieChart: React.FC<PieChartProperties> = ({
       option={chartConfiguration}
       style={{ height: "450px", width: "100%" }}
       onEvents={{
-        'click': (params: any) => {
-          if (onItemClick) onItemClick(params.name);
+        'click': (params: { name?: string }) => {
+          if (onItemClick && params.name) onItemClick(params.name);
         }
       }}
     />

@@ -6,16 +6,41 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const DATA_DIR = path.resolve(__dirname, '../src/data');
 const OUTPUT_FILE = path.join(DATA_DIR, 'all_plugins.json');
+const MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json');
 
-// ── BUILD-TIME DATA INGESTION PIPELINE ──
-// This script serves as the infrastructural backbone for the Jenkins Plugin Modernizer.
-// Instead of the React frontend lagging and collapsing under 429 live network requests,
-// this script autonomously compiles the global Jenkins endpoint matrix at build-time.
-// 
-// Architecture Strategy:
-// By querying the raw git/tree API once, we cleanly bypass the 60req/hr GitHub API limits.
+const TMP_OUTPUT_FILE = path.join(DATA_DIR, 'all_plugins.json.tmp');
+const TMP_MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json.tmp');
+
 const TREE_API = 'https://api.github.com/repos/jenkins-infra/metadata-plugin-modernizer/git/trees/main?recursive=1';
-const BATCH_SIZE = 30; // Highly optimized concurrent worker limits
+const REPO_IDENTIFIER = 'jenkins-infra/metadata-plugin-modernizer';
+const USER_AGENT = 'jenkins-plugin-modernizer-dashboard/1.0 (+https://github.com/rahulBadda08/jenkins-plugin-modernizer-dashboard)';
+const BATCH_SIZE = 30;
+const MIN_SUCCESS_RATIO = 0.95; // 95% threshold to guard against partial data publishing
+const MAX_RETRIES = 3;
+
+function getAuthHeaders() {
+    const headers = {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/vnd.github.v3+json',
+    };
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token.trim()}`;
+    }
+    return headers;
+}
+
+function getRawHeaders() {
+    const headers = {
+        'User-Agent': USER_AGENT,
+        'Accept': 'application/json',
+    };
+    const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN;
+    if (token) {
+        headers['Authorization'] = `Bearer ${token.trim()}`;
+    }
+    return headers;
+}
 
 async function ensureDir(dir) {
     try {
@@ -25,77 +50,214 @@ async function ensureDir(dir) {
     }
 }
 
-async function fetchWithRetry(url, retries = 3) {
-    for (let i = 0; i < retries; i++) {
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            const res = await fetch(url);
-            if (!res.ok) throw new Error(`Status ${res.status}`);
-            return await res.json();
-        } catch (e) {
-            if (i === retries - 1) throw e;
-            await new Promise(r => setTimeout(r, 1000 * (i + 1))); // exponential backoff
+            const res = await fetch(url, { headers });
+            
+            if (res.ok) {
+                return await res.json();
+            }
+
+            const status = res.status;
+            const rateLimitRemaining = res.headers.get('x-ratelimit-remaining');
+            const rateLimitReset = res.headers.get('x-ratelimit-reset');
+            const retryAfter = res.headers.get('retry-after');
+
+            // Non-transient client errors: 401, 404
+            if (status === 401 || status === 404) {
+                throw new Error(`HTTP ${status} (${res.statusText})`);
+            }
+
+            if (status === 403) {
+                const isRateLimited = rateLimitRemaining === '0';
+                if (isRateLimited) {
+                    const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString() : 'unknown';
+                    throw new Error(`GitHub API Rate limit exceeded (reset at ${resetTime})`);
+                }
+                throw new Error(`HTTP 403 Forbidden`);
+            }
+
+            // Transient errors: 429, 500, 502, 503, 504
+            const isTransient = status === 429 || (status >= 500 && status < 600);
+            if (!isTransient || attempt === maxRetries - 1) {
+                throw new Error(`HTTP ${status} (${res.statusText})`);
+            }
+
+            // Calculate backoff delay
+            let backoffMs = Math.pow(2, attempt) * 1000;
+            if (retryAfter) {
+                const parsed = parseInt(retryAfter, 10);
+                if (!isNaN(parsed)) backoffMs = parsed * 1000;
+            }
+            console.warn(`[WARN] Transient error ${status} on ${url}. Retrying in ${backoffMs}ms (attempt ${attempt + 1}/${maxRetries})...`);
+            await sleep(backoffMs);
+        } catch (err) {
+            if (attempt === maxRetries - 1) {
+                throw err;
+            }
+            const backoffMs = Math.pow(2, attempt) * 1000;
+            await sleep(backoffMs);
         }
     }
 }
 
+function validatePluginReport(data, filePath) {
+    if (!data || typeof data !== 'object') {
+        return { valid: false, reason: 'Report is not an object' };
+    }
+    if (!data.pluginName || typeof data.pluginName !== 'string') {
+        return { valid: false, reason: 'Missing or invalid pluginName' };
+    }
+    if (!Array.isArray(data.migrations)) {
+        return { valid: false, reason: 'Missing or non-array migrations' };
+    }
+    return { valid: true };
+}
+
+async function cleanupTmpFiles() {
+    await fs.unlink(TMP_OUTPUT_FILE).catch(() => {});
+    await fs.unlink(TMP_MANIFEST_FILE).catch(() => {});
+}
+
 async function run() {
-    console.log('Starting Jenkin Plugin Data Ingestion...');
-    
-    // 1. Fetch entire repository tree (1 API call!)
-    console.log(`Fetching repository tree to map all plugin endpoints...`);
-    const treeRes = await fetch(TREE_API);
-    if (!treeRes.ok) throw new Error(`Failed to fetch tree: ${treeRes.status}`);
-    const treeData = await treeRes.json();
-    
-    // 2. Identify all aggregated_migrations.json files across 400+ folders
+    console.log('Starting Jenkins Plugin Ecosystem Data Ingestion...');
+    await ensureDir(DATA_DIR);
+
+    // 1. Fetch entire repository tree
+    console.log('Fetching repository tree to map all plugin endpoints...');
+    const treeHeaders = getAuthHeaders();
+    let treeData;
+    try {
+        treeData = await fetchWithRetry(TREE_API, treeHeaders);
+    } catch (err) {
+        throw new Error(`Failed to fetch tree from ${TREE_API}: ${err.message}`);
+    }
+
+    if (!treeData || !Array.isArray(treeData.tree)) {
+        throw new Error('Invalid response from GitHub Tree API (missing tree array)');
+    }
+
+    const treeSha = treeData.sha || 'unknown';
+
+    // 2. Identify and sort all aggregated_migrations.json files deterministically
     const validPaths = treeData.tree
-        .filter(item => item.path.endsWith('reports/aggregated_migrations.json'))
-        .map(item => item.path);
-        
-    console.log(`Found ${validPaths.length} valid plugin report files in the ecosystem.`);
-    
-    if (validPaths.length === 0) {
-        throw new Error('No reports found. Tree API might have changed.');
+        .filter(item => item.path && item.path.endsWith('reports/aggregated_migrations.json'))
+        .map(item => item.path)
+        .sort((a, b) => a.localeCompare(b));
+
+    const discoveredCount = validPaths.length;
+    console.log(`Found ${discoveredCount} plugin report files in the ecosystem.`);
+
+    if (discoveredCount === 0) {
+        throw new Error('No reports found. Tree API structure may have changed.');
     }
 
     const compiledData = [];
+    const failedPaths = [];
+    const invalidReports = [];
     let completed = 0;
 
-    // 3. Batch fetch raw JSON using raw.githubusercontent (No API limits)
+    // 3. Batch fetch raw JSON using raw.githubusercontent
     console.log(`Downloading raw JSON data in batches of ${BATCH_SIZE}...`);
+    const rawHeaders = getRawHeaders();
+
     for (let i = 0; i < validPaths.length; i += BATCH_SIZE) {
         const batchPaths = validPaths.slice(i, i + BATCH_SIZE);
-        const batchPromises = batchPaths.map(async (filePath) => {
-            const pluginName = filePath.split('/')[0];
-            const rawUrl = `https://raw.githubusercontent.com/jenkins-infra/metadata-plugin-modernizer/main/${filePath}`;
-            
-            try {
-                const data = await fetchWithRetry(rawUrl);
-                // Graceful schema handler
-                if (data && data.pluginName && data.migrations) {
-                    compiledData.push(data);
+        const batchResults = await Promise.all(
+            batchPaths.map(async (filePath) => {
+                const rawUrl = `https://raw.githubusercontent.com/${REPO_IDENTIFIER}/main/${filePath}`;
+                try {
+                    const data = await fetchWithRetry(rawUrl, rawHeaders);
+                    const validation = validatePluginReport(data, filePath);
+                    if (validation.valid) {
+                        return { status: 'success', data };
+                    } else {
+                        return { status: 'invalid', filePath, reason: validation.reason };
+                    }
+                } catch (err) {
+                    return { status: 'failed', filePath, error: err.message };
                 }
-            } catch (err) {
-                console.error(`\n Failed to fetch ${pluginName}: ${err.message}`);
-            }
-        });
-        
-        await Promise.all(batchPromises);
-        completed += batchPaths.length;
-        process.stdout.write(`\r Progress: ${completed}/${validPaths.length} remote files downloaded...`);
-    }
-    
-    console.log('\n Data download complete!');
+            })
+        );
 
-    // 4. Save to src/data inside the local React environment
-    await ensureDir(DATA_DIR);
-    console.log(` Saving compiled JSON bundle to ${OUTPUT_FILE}`);
-    await fs.writeFile(OUTPUT_FILE, JSON.stringify(compiledData, null, 2), 'utf8');
-    
-    console.log(` Ingestion SUCCESS! Extracted ${compiledData.length} fully structured Jenkins plugins.`);
+        for (const res of batchResults) {
+            if (res.status === 'success') {
+                compiledData.push(res.data);
+            } else if (res.status === 'invalid') {
+                invalidReports.push({ path: res.filePath, reason: res.reason });
+            } else if (res.status === 'failed') {
+                failedPaths.push({ path: res.filePath, error: res.error });
+            }
+        }
+
+        completed += batchPaths.length;
+        process.stdout.write(`\r Progress: ${completed}/${discoveredCount} remote files downloaded...`);
+    }
+
+    console.log('\nData download complete!');
+
+    // 4. Deterministic sorting by pluginName
+    compiledData.sort((a, b) => a.pluginName.localeCompare(b.pluginName));
+
+    const successfulCount = compiledData.length;
+    const failedCount = failedPaths.length;
+    const invalidCount = invalidReports.length;
+    const successRatio = discoveredCount > 0 ? successfulCount / discoveredCount : 0;
+
+    console.log(`\n── Ingestion Telemetry Summary ──`);
+    console.log(`Discovered:  ${discoveredCount}`);
+    console.log(`Successful:  ${successfulCount}`);
+    console.log(`Failed:      ${failedCount}`);
+    console.log(`Invalid:     ${invalidCount}`);
+    console.log(`Success Rate: ${(successRatio * 100).toFixed(2)}% (Target: >= ${(MIN_SUCCESS_RATIO * 100)}%)`);
+
+    // 5. Enforce success threshold
+    if (successRatio < MIN_SUCCESS_RATIO) {
+        await cleanupTmpFiles();
+        throw new Error(
+            `Ingestion aborted: Success ratio ${(successRatio * 100).toFixed(2)}% is below safe threshold ${(MIN_SUCCESS_RATIO * 100)}%. Existing dataset preserved.`
+        );
+    }
+
+    // 6. Generate Data Manifest
+    const manifest = {
+        sourceRepository: REPO_IDENTIFIER,
+        sourceTreeSha: treeSha,
+        generatedAt: new Date().toISOString(),
+        discoveredCount,
+        successfulCount,
+        failedCount,
+        invalidCount,
+        successRatio: parseFloat(successRatio.toFixed(4)),
+        failures: failedPaths.slice(0, 50),
+        invalids: invalidReports.slice(0, 50),
+    };
+
+    // 7. Atomic writes: Write to .tmp files, then atomic rename
+    try {
+        console.log(`Staging compiled dataset (${successfulCount} plugins)...`);
+        await fs.writeFile(TMP_OUTPUT_FILE, JSON.stringify(compiledData, null, 2) + '\n', 'utf8');
+        await fs.writeFile(TMP_MANIFEST_FILE, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
+
+        // Atomic renames
+        await fs.rename(TMP_OUTPUT_FILE, OUTPUT_FILE);
+        await fs.rename(TMP_MANIFEST_FILE, MANIFEST_FILE);
+        console.log(`Successfully published atomic dataset to ${OUTPUT_FILE}`);
+        console.log(`Successfully published data manifest to ${MANIFEST_FILE}`);
+    } catch (err) {
+        await cleanupTmpFiles();
+        throw new Error(`Failed to commit atomic files: ${err.message}`);
+    }
+
+    console.log(`Ingestion SUCCESS! Extracted ${successfulCount} validated Jenkins plugins.`);
 }
 
 run().catch(err => {
-    console.error(`\n Fatal Error during ingestion:\n`, err);
+    console.error(`\n[FATAL] Data Ingestion Error:`, err.message || err);
     process.exit(1);
 });

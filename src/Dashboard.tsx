@@ -12,35 +12,22 @@ import automationStackImage from "./assets/automation_stack_blueprint.png";
 import dataAcquisitionImage from "./assets/data_acquisition_blueprint.png";
 import visualizationLayerImage from "./assets/visualization_layer_blueprint.png";
 
-// ── STRICT TYPESCRIPT DEFINITIONS ──
-type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
-type PRStatus = "MERGED" | "OPEN" | "CLOSED" | "DRAFT" | string;
-
-interface Migration {
-  migrationName: string;
-  migrationStatus: MigrationStatus;
-  pullRequestStatus: PRStatus;
-  pullRequestUrl: string;
-  tags: string[];
-  checkRuns: Record<string, string | null>;
-  checkRunsSummary: string;
-  additions: number;
-  deletions: number;
-  changedFiles: number;
-  pluginVersion: string;
-  jenkinsVersion: string;
-  jenkinsBaseline?: string;
-  targetBaseline?: string;
-  effectiveBaseline?: string;
-  timestamp: string;
-  key?: string;
-}
-
-interface PluginData {
-  pluginName: string;
-  pluginRepository: string;
-  migrations: Migration[];
-}
+// ── DOMAIN ARCHITECTURE & STRICT TYPES ──
+import type { PluginData, EnrichedPlugin } from "./domain/types";
+import { validatePluginDataset } from "./domain/validation";
+import { selectActiveMigration } from "./domain/migrationPolicy";
+import {
+  LTS_BASELINE,
+  OUTDATED_MINOR_THRESHOLD,
+  BASELINE_BUCKET_META,
+  getBaselineBucket,
+  getBaselineBucketByToken,
+  getMigrationBaselineMinor,
+  calculateBaselineDrift,
+  type BaselineBucket,
+} from "./domain/baselineParser";
+import { calculateHealthScore, getPluginInsight } from "./domain/scoring";
+import { sanitizeShellArg } from "./domain/security";
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -79,316 +66,89 @@ const DIAGNOSTIC_ACTIONS: Record<string, string> = {
   "Baseline": "Upgrade Jenkins core baseline to >= 2.440.3 for modern API support."
 };
 
-// ── V32: KINETIC MARQUEE COMPONENT ──
+// ── COMMERCIAL TELEMETRY HEADER ──
 const MarqueeHeader: React.FC<{ text: string; style?: React.CSSProperties }> = ({ text, style }) => {
-  const items = Array(10).fill(`${text} - SYSTEM INTEGRITY`);
   return (
-    <div className="marquee-wrapper reveal-node" style={style}>
-      <div className="marquee-content">
-        {items.map((item, idx) => (
-          <div key={idx} className="marquee-item">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-            {item}
-          </div>
-        ))}
-        {items.map((item, idx) => (
-          <div key={`dup-${idx}`} className="marquee-item">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-            {item}
-          </div>
-        ))}
+    <div
+      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2.5 text-xs font-mono text-slate-300 backdrop-blur-md mb-6"
+      style={style}
+    >
+      <div className="flex items-center gap-2">
+        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+        <span className="font-semibold tracking-wider text-slate-100">{text}</span>
+      </div>
+      <div className="flex items-center gap-3 text-slate-400 text-[11px]">
+        <span>TELEMETRY STREAM: SYNCHRONIZED</span>
+        <span className="text-slate-700">|</span>
+        <span>431 PLUGINS INDEXED</span>
       </div>
     </div>
   );
 };
 
-// ── V49: THE SURGICAL DIRECTIVE ENGINE ──
-const LTS_BASELINE = "2.452.3";
-const OUTDATED_MINOR_THRESHOLD = 440;
-const BASELINE_WARNING_MINOR_THRESHOLD = 452;
-type BaselineBucket = "critical" | "warning" | "aligned";
-type BaselineFilterToken = "BASELINE_CRITICAL" | "BASELINE_WARNING" | "BASELINE_ALIGNED";
-
-const BASELINE_BUCKET_META: Record<BaselineBucket, { label: string; token: BaselineFilterToken; insight: string; severity: "danger" | "warning" | "success" }> = {
-  critical: {
-    label: "Critical Legacy (<2.440)",
-    token: "BASELINE_CRITICAL",
-    insight: "Plugins in this segment are behind the modernization threshold and need immediate baseline upgrades.",
-    severity: "danger"
-  },
-  warning: {
-    label: "Needs LTS Upgrade (2.440-2.451)",
-    token: "BASELINE_WARNING",
-    insight: "Plugins here are operational but still behind the 2026 LTS compatibility baseline.",
-    severity: "warning"
-  },
-  aligned: {
-    label: "Aligned (>=2.452)",
-    token: "BASELINE_ALIGNED",
-    insight: "Plugins in this segment are aligned with current Jenkins LTS baseline expectations.",
-    severity: "success"
-  }
-};
-
-const parseBaselineMinor = (version?: string): number | null => {
-  if (!version) return null;
-  const [majorRaw, minorRaw] = version.split(".");
-  const major = Number.parseInt(majorRaw || "", 10);
-  const minor = Number.parseInt(minorRaw || "", 10);
-  if (Number.isNaN(major) || Number.isNaN(minor)) return null;
-  if (major < 2) return 0;
-  return major > 2 ? 1000 + minor : minor;
-};
-
-const getMigrationBaselineMinor = (migration?: Partial<Migration>): number | null => {
-  const candidates = [
-    migration?.jenkinsVersion,
-    migration?.effectiveBaseline,
-    migration?.jenkinsBaseline,
-    migration?.targetBaseline
-  ];
-  for (const candidate of candidates) {
-    const parsed = parseBaselineMinor(candidate);
-    if (parsed !== null) return parsed;
-  }
-  return null;
-};
-
-const getBaselineBucket = (minor: number | null): BaselineBucket => {
-  if (minor === null || minor < OUTDATED_MINOR_THRESHOLD) return "critical";
-  if (minor < BASELINE_WARNING_MINOR_THRESHOLD) return "warning";
-  return "aligned";
-};
-
-const getBaselineBucketByToken = (token: string): BaselineBucket | null => {
-  const entry = (Object.entries(BASELINE_BUCKET_META) as Array<[BaselineBucket, typeof BASELINE_BUCKET_META[BaselineBucket]]>)
-    .find(([, meta]) => meta.token === token);
-  return entry?.[0] || null;
-};
-
-const calculateDrift = (current: string): { gap: number; criticality: 'low' | 'med' | 'critical' } => {
-  const parse = (v: string) => v.split('.').map(p => parseInt(p) || 0);
-  const currentParts = parse(current || "0.0");
-  const baselineParts = parse(LTS_BASELINE);
-
-  // High-level heuristic for version distance (Focusing on the minor part primarily for Jenkins 2.x)
-  const gap = Math.abs((baselineParts[0] * 1000 + baselineParts[1]) - (currentParts[0] * 1000 + currentParts[1]));
-
-  return {
-    gap,
-    criticality: gap > 50 ? 'critical' : (gap > 20 ? 'med' : 'low')
-  };
-};
-
-const getRemediationCommands = (checklist: any[], pluginName: string): string[] => {
-  const commands: string[] = [];
-  const fails = checklist.filter(c => !c.value);
-
-  if (fails.some(f => f.label.includes('BOM'))) {
-    commands.push(`mvn jenkins-plugin-modernizer:modernize -Drecipe=BomAlignment`);
-  }
-  if (fails.some(f => f.label.includes('Parent'))) {
-    commands.push(`mvn versions:update-parent -DparentVersion=5.12`);
-  }
-  if (fails.some(f => f.label.includes('CI'))) {
-    commands.push(`gh workflow run modernization.yml --repo jenkins-plugins/${pluginName}`);
-  }
-  if (fails.some(f => f.label.includes('API'))) {
-    commands.push(`mvn rewrite:run -DactiveRecipes=org.openrewrite.jenkins.ModernizePlugin`);
-  }
-
-  if (commands.length === 0) commands.push("# No immediate technical remediation required. Baseline aligned.");
-  return commands;
-};
-
-// ── V45: STRATEGIC ASSESSMENT ENGINE (CENTRALIZED) ──
-interface PluginInsight {
-  actionInsight: {
-    status: string;
-    severity: 'danger' | 'warning' | 'success';
-    summary: string[];
-    recommendations: string[];
-  };
-  priorities: {
-    severity: { label: string; status: string; color: string };
-    maintenance: { label: string; status: string; color: string };
-    security: { label: string; status: string; color: string };
-  };
-  checklist: Array<{ label: string; value: boolean; description: string }>;
-  issueBreakdown: {
-    deprecated: { label: string; value: boolean; display: string };
-    ci: { label: string; value: boolean; display: string };
-    pr: { label: string; value: boolean; display: string };
-  };
-  surgical: {
-    drift: { gap: number; criticality: string };
-    commands: string[];
-    difficulty: number;
-  };
+interface VendorDocument extends Document {
+  webkitFullscreenElement?: Element | null;
+  mozFullScreenElement?: Element | null;
+  msFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void>;
+  mozCancelFullScreen?: () => Promise<void>;
+  msExitFullscreen?: () => Promise<void>;
 }
 
-const getPluginInsight = (plugin: PluginData): PluginInsight => {
-  const migration = plugin.migrations?.[0] || {} as Migration;
-  const checkRuns = migration.checkRuns || {};
-  const checkRunKeys = Object.keys(checkRuns);
-  const status = (migration.migrationStatus || "").toLowerCase();
-  const ver = migration.jenkinsVersion || "0.0";
-  const prStatus = (migration.pullRequestStatus || "unknown").toLowerCase();
+interface VendorHTMLElement extends HTMLElement {
+  webkitRequestFullscreen?: () => Promise<void>;
+  mozRequestFullScreen?: () => Promise<void>;
+  msRequestFullscreen?: () => Promise<void>;
+}
 
-  const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
-  const hasSecurityRisk = checkRunKeys.some(k => k.toLowerCase().includes("security")) &&
-    checkRuns[checkRunKeys.find(k => k.toLowerCase().includes("security"))!] !== "success";
-  const hasCiFailure = migration.checkRunsSummary !== "success";
-  const hasNoPR = prStatus === "unknown" || prStatus === "none" || prStatus === "";
-
-  // ── V46: MODERNIZATION CHECKLIST LOGIC ──
-  const checklist = [
-    {
-      label: "BOM Aligned",
-      value: checkRuns['BOM'] === 'success' || checkRuns['Bom'] === 'success',
-      description: "Bill of Materials dependency management"
-    },
-    {
-      label: "Latest Parent POM",
-      value: checkRuns['Parent Pom'] === 'success',
-      description: "Modern Jenkins build configuration"
-    },
-    {
-      label: "CI Configured",
-      value: migration.checkRunsSummary === 'success',
-      description: "Automated verification & passing tests"
-    },
-    {
-      label: "Active Maintenance",
-      value: !hasNoPR,
-      description: "Ongoing pull request and refactor activity"
-    },
-    {
-      label: "Modern APIs",
-      value: checkRuns['Modernizer'] === 'success',
-      description: "Verification of non-deprecated API usage"
-    }
-  ];
-
-  const issueBreakdown = {
-    deprecated: {
-      label: "Deprecated",
-      value: (migration.tags || []).some(t => t.toLowerCase() === 'deprecated'),
-      display: (migration.tags || []).some(t => t.toLowerCase() === 'deprecated') ? "YES" : "NO"
-    },
-    ci: {
-      label: "CI Integrity",
-      value: migration.checkRunsSummary === 'success',
-      display: migration.checkRunsSummary === 'success' ? "CONFIGURED" : "MISSING"
-    },
-    pr: {
-      label: "Maintenance",
-      value: !hasNoPR,
-      display: !hasNoPR ? "ACTIVE" : "NONE"
-    }
-  };
-
-  let actionInsight: PluginInsight['actionInsight'] = {
-    status: "STABLE & ELIGIBLE",
-    severity: "success",
-    summary: [
-      "Modernization Automated → Code base is aligned with current Jenkins standards",
-      "Clear Maintenance Path → Integrated into modernization CI"
-    ],
-    recommendations: ["Monitor for new modernization recipes", "Ecosystem baseline is healthy"]
-  };
-
-  if (status === "fail" || status === "failure" || hasSecurityRisk) {
-    actionInsight = {
-      status: "HIGH RISK / CRITICAL",
-      severity: "danger",
-      summary: [
-        status.includes("fail") ? "Modernization Stalled → Automated tools unable to reconcile code base" : "🚨 Security Integrity Breach → Critical remediation required",
-        hasCiFailure ? "Pipeline Regressions → Core stability checks are failing" : "⚠️ Baseline Misalignment → System integrity at risk"
-      ],
-      recommendations: [
-        "Manual intervention required: Review 'modernizer' logs",
-        "Analyze security findings in repository",
-        "Consider repository adoption or replacement"
-      ]
-    };
-  } else if (isOutdated || status === "aborted" || hasNoPR) {
-    const narratives = [];
-    if (hasNoPR) narratives.push("No active pull requests → No ongoing maintenance detected");
-    if (isOutdated) narratives.push(`Architecturally Obsolete → Version ${ver} is below Ecosystem 2026 baseline`);
-    if (status === "aborted") narratives.push("Build Terminated → Modernization attempt was manually interrupted");
-    if (narratives.length === 0) narratives.push("Moderate risk identified in plugin telemetry");
-
-    actionInsight = {
-      status: "LEGACY / AT RISK",
-      severity: "warning",
-      summary: narratives,
-      recommendations: [
-        "Adopt and modernize repository",
-        "Upgrade Jenkins baseline to >= 2.440.3",
-        "Establish active PR workflow to resume maintenance"
-      ]
-    };
-  }
-
-  const priorities = {
-    severity: {
-      label: "Severity",
-      status: (status === "fail" || status === "failure" || hasSecurityRisk) ? "Critical" : (isOutdated ? "Warning" : "Low"),
-      color: (status === "fail" || status === "failure" || hasSecurityRisk) ? "var(--accent-red)" : (isOutdated ? "var(--accent-amber)" : "var(--accent-neon)")
-    },
-    maintenance: {
-      label: "Maintenance",
-      status: hasNoPR ? "Inactive" : (status.includes("fail") ? "Stalled" : "Active"),
-      color: hasNoPR ? "var(--accent-amber)" : (status.includes("fail") ? "var(--accent-red)" : "var(--accent-neon)")
-    },
-    security: {
-      label: "Security",
-      status: hasSecurityRisk ? "Active Advisory" : "No active advisory",
-      color: hasSecurityRisk ? "var(--accent-red)" : "var(--accent-neon)"
-    }
-  };
-
-  const drift = calculateDrift(ver);
-  const commands = getRemediationCommands(checklist, plugin.pluginName);
-
-  // V49: Complexity Heuristic
-  const failCount = checklist.filter(c => !c.value).length;
-  const intensityFactor = ((migration.additions || 0) + (migration.deletions || 0)) > 1000 ? 2 : 0;
-  const driftFactor = drift.gap > 50 ? 3 : (drift.gap > 20 ? 1 : 0);
-  const difficulty = Math.min(10, 1 + failCount + intensityFactor + driftFactor);
-
-  return { actionInsight, priorities, checklist, issueBreakdown, surgical: { drift, commands, difficulty } };
+const topicColorMap: Record<string, string> = {
+  'DEPENDENCIES': '#AAFF00',      /* Toxic Green */
+  'SKIP_VERIFICATION': '#FF003C', /* Crimson */
+  'TESTING': '#D4ED2C',           /* Neon Lime */
+  'MIGRATION': '#00D2FF',         /* Electric Blue */
+  'CHORE': '#FF00FF',             /* Deep Magenta */
+  'DEVELOPER': '#00FF9F',         /* Matrix Green */
+  'BOM': '#C084FC',               /* Neon Purple */
+  'PARENT_POM': '#FF3131',         /* Fluorescent Red */
+  'BUILD': '#0FF0FC',              /* Electric Cyan */
+  'SECURITY': '#8B5CF6',           /* Deep Violet */
+  'UI': '#BD00FF',                 /* Purple Thunder */
 };
 
-// ── V48: GLOBAL RANKING ENGINE ──
-const calculateHealthScore = (plugin: PluginData): number => {
-  let score = 100;
-  const migration = plugin.migrations?.[0] || {} as Migration;
-  const checkRuns = migration.checkRuns || {};
-  const ver = migration.jenkinsVersion || "0.0";
-  const prStatus = (migration.pullRequestStatus || "unknown").toLowerCase();
+const VIBRANT_PALETTE = [
+  "#D4ED2C", /* Neon Lime */
+  "#FF00FF", /* Magenta */
+  "#00D2FF", /* Blue */
+  "#FF003C", /* Crimson */
+  "#00FF9F", /* Matrix Green */
+  "#C084FC", /* Purple */
+  "#AAFF00", /* Toxic Green */
+  "#0FF0FC"  /* Cyan */
+];
 
-  if (migration.checkRunsSummary !== "success") score -= 25;
-  if ((migration.tags || []).some(t => t.toLowerCase() === 'deprecated')) score -= 20;
-  if (checkRuns['BOM'] !== 'success' && checkRuns['Bom'] !== 'success') score -= 15;
-  if (prStatus === "unknown" || prStatus === "none" || prStatus === "") score -= 15;
-  if (Object.keys(checkRuns).some(k => k.toLowerCase().includes("security") && checkRuns[k] !== "success")) score -= 15;
-  if (ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD)) score -= 10;
-
-  return Math.max(0, score);
+const getTopicColor = (topic: string, index: number = 0): string => {
+  if (!topic) return '#94a3b8';
+  const key = topic.replace(/-/g, '_').toUpperCase();
+  for (const [k, v] of Object.entries(topicColorMap)) {
+    if (key.includes(k) || k.includes(key)) return v;
+  }
+  return VIBRANT_PALETTE[index % VIBRANT_PALETTE.length];
 };
 
 function Dashboard() {
-  const allPluginsData = allPluginsRaw as unknown as PluginData[];
+  const allPluginsData: PluginData[] = useMemo(() => validatePluginDataset(allPluginsRaw), []);
 
   // ── V45: PRE-CALCULATE ALL INSIGHTS ──
-  const allPluginsWithInsights = useMemo(() => {
-    return allPluginsData.map(plugin => ({
-      ...plugin,
-      insight: getPluginInsight(plugin),
-      healthScore: calculateHealthScore(plugin)
-    }));
+  const allPluginsWithInsights: EnrichedPlugin[] = useMemo(() => {
+    return allPluginsData.map(plugin => {
+      const activeMigration = selectActiveMigration(plugin.migrations);
+      return {
+        ...plugin,
+        activeMigration,
+        insight: getPluginInsight(plugin),
+        healthScore: calculateHealthScore(plugin)
+      };
+    });
   }, [allPluginsData]);
 
   // ── V48: ECOSYSTEM BENCHMARKING DISTRIBUTION ──
@@ -428,11 +188,12 @@ function Dashboard() {
 
   useEffect(() => {
     const handleFullscreenChange = () => {
+      const doc = document as VendorDocument;
       setIsFullscreen(!!(
-        document.fullscreenElement ||
-        (document as any).webkitFullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).msFullscreenElement
+        doc.fullscreenElement ||
+        doc.webkitFullscreenElement ||
+        doc.mozFullScreenElement ||
+        doc.msFullscreenElement
       ));
     };
 
@@ -450,17 +211,18 @@ function Dashboard() {
   }, []);
 
   const toggleFullscreen = (targetElem?: HTMLElement | null) => {
-    const elem = (targetElem || document.documentElement) as any;
+    const elem = (targetElem || document.documentElement) as VendorHTMLElement;
+    const doc = document as VendorDocument;
     const isDocFS = !!(
-      document.fullscreenElement ||
-      (document as any).webkitFullscreenElement ||
-      (document as any).mozFullScreenElement ||
-      (document as any).msFullscreenElement
+      doc.fullscreenElement ||
+      doc.webkitFullscreenElement ||
+      doc.mozFullScreenElement ||
+      doc.msFullscreenElement
     );
 
     if (!isDocFS) {
       if (elem.requestFullscreen) {
-        elem.requestFullscreen().catch((err: any) => console.warn("Fullscreen error:", err));
+        elem.requestFullscreen().catch((err: unknown) => console.warn("Fullscreen error:", err));
       } else if (elem.webkitRequestFullscreen) {
         elem.webkitRequestFullscreen();
       } else if (elem.mozRequestFullScreen) {
@@ -469,7 +231,6 @@ function Dashboard() {
         elem.msRequestFullscreen();
       }
     } else {
-      const doc = document as any;
       if (doc.exitFullscreen) {
         doc.exitFullscreen().catch(() => {});
       } else if (doc.webkitExitFullscreen) {
@@ -503,6 +264,15 @@ function Dashboard() {
     setCurrentlyActiveTab(pluginName);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  const activateBaselineBucket = (bucketLabel: string) => {
+    const bucketEntry = (Object.entries(BASELINE_BUCKET_META) as Array<[BaselineBucket, typeof BASELINE_BUCKET_META[BaselineBucket]]>)
+      .find(([, meta]) => meta.label === bucketLabel);
+    if (!bucketEntry) return;
+    setGlobalSearch(bucketEntry[1].token);
+    setCurrentlyActiveTab("Data Explorer");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const [globalSearch, setGlobalSearch] = useState<string>("");
   const [severityFilter, setSeverityFilter] = useState<string>("ALL");
   const [topicFilter, setTopicFilter] = useState<string>("ALL");
@@ -528,76 +298,9 @@ function Dashboard() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // ── HOOK: KINETIC MOUSE TRACKER (V42: LERP REFACTOR) ──
-  const targetX = useRef(window.innerWidth / 2);
-  const targetY = useRef(window.innerHeight / 2);
-  const currentX = useRef(window.innerWidth / 2);
-  const currentY = useRef(window.innerHeight / 2);
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      targetX.current = e.clientX;
-      targetY.current = e.clientY;
-    };
-
-    let rafId: number;
-    const animate = () => {
-      // LERP: current = current + (target - current) * factor
-      // 0.08 provides an oily, fluid lag that feels high-end
-      currentX.current += (targetX.current - currentX.current) * 0.08;
-      currentY.current += (targetY.current - currentY.current) * 0.08;
-
-      document.documentElement.style.setProperty('--mouse-x', `${currentX.current}px`);
-      document.documentElement.style.setProperty('--mouse-y', `${currentY.current}px`);
-
-      rafId = requestAnimationFrame(animate);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    rafId = requestAnimationFrame(animate);
-
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   // ── HOOK: SCROLL REVEAL ENGINE (V17.3) ──
-
-  const topicColorMap: Record<string, string> = {
-    'DEPENDENCIES': '#AAFF00',      /* Toxic Green */
-    'SKIP_VERIFICATION': '#FF003C', /* Crimson */
-    'TESTING': '#D4ED2C',           /* Neon Lime */
-    'MIGRATION': '#00D2FF',         /* Electric Blue */
-    'CHORE': '#FF00FF',             /* Deep Magenta */
-    'DEVELOPER': '#00FF9F',         /* Matrix Green */
-    'BOM': '#C084FC',               /* Neon Purple */
-    'PARENT_POM': '#FF3131',         /* Fluorescent Red */
-    'BUILD': '#0FF0FC',              /* Electric Cyan */
-    'SECURITY': '#8B5CF6',           /* Deep Violet */
-    'UI': '#BD00FF',                 /* Purple Thunder */
-  };
-
-  const VIBRANT_PALETTE = [
-    "#D4ED2C", /* Neon Lime */
-    "#FF00FF", /* Magenta */
-    "#00D2FF", /* Blue */
-    "#FF003C", /* Crimson */
-    "#00FF9F", /* Matrix Green */
-    "#C084FC", /* Purple */
-    "#AAFF00", /* Toxic Green */
-    "#0FF0FC"  /* Cyan */
-  ];
-
-  const getTopicColor = (topic: string, index: number = 0) => {
-    if (!topic) return '#94a3b8';
-    const key = topic.replace(/-/g, '_').toUpperCase();
-    for (const [k, v] of Object.entries(topicColorMap)) {
-      if (key.includes(k) || k.includes(key)) return v;
-    }
-    // V26.6: Use rotating palette for unique colors if not explicitly mapped
-    return VIBRANT_PALETTE[index % VIBRANT_PALETTE.length];
-  };
 
   // Ref for click-outside detection
   const commandBarRef = useRef<HTMLDivElement>(null);
@@ -612,8 +315,11 @@ function Dashboard() {
         }
       }, { threshold: 0.1, ...options });
 
-      if (ref.current) observer.observe(ref.current);
-      return () => { if (ref.current) observer.unobserve(ref.current); };
+      const currentElement = ref.current;
+      if (currentElement) observer.observe(currentElement);
+      return () => {
+        if (currentElement) observer.unobserve(currentElement);
+      };
     }, [options]);
     return ref;
   };
@@ -800,15 +506,6 @@ function Dashboard() {
     setTimeout(() => { isStrategicNavRef.current = false; }, 100);
   };
 
-  const activateBaselineBucket = (bucketLabel: string) => {
-    const bucketEntry = (Object.entries(BASELINE_BUCKET_META) as Array<[BaselineBucket, typeof BASELINE_BUCKET_META[BaselineBucket]]>)
-      .find(([, meta]) => meta.label === bucketLabel);
-    if (!bucketEntry) return;
-    setGlobalSearch(bucketEntry[1].token);
-    setCurrentlyActiveTab("Data Explorer");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   // ── ROUTING & HISTORY SYNCHRONIZATION ──
   useEffect(() => {
     const handleHashChange = () => {
@@ -836,8 +533,12 @@ function Dashboard() {
     };
 
     window.addEventListener("hashchange", handleHashChange);
+    window.addEventListener("popstate", handleHashChange);
     handleHashChange();
-    return () => window.removeEventListener("hashchange", handleHashChange);
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+      window.removeEventListener("popstate", handleHashChange);
+    };
   }, [allPluginsData]);
 
   useEffect(() => {
@@ -873,8 +574,8 @@ function Dashboard() {
     if (!isPluginView) {
       setGlobalSearch("");
       setSeverityFilter("ALL");
-      topicFilter !== "ALL" && setTopicFilter("ALL");
-      prFilter !== "ALL" && setPrFilter("ALL");
+      setTopicFilter("ALL");
+      setPrFilter("ALL");
       setWorkbenchPage(1); // Reset pagination on tab change
 
       // Close any open liquid dropdowns
@@ -940,7 +641,7 @@ function Dashboard() {
       .map(p => {
         const driftFactor = p.insight.surgical.drift.gap;
         const failFactor = p.insight.checklist.filter(c => !c.value).length * 10;
-        const totalImpact = (driftFactor + failFactor) * (1 + (p.migrations[0].additions + p.migrations[0].deletions) / 5000);
+        const totalImpact = (driftFactor + failFactor) * (1 + ((p.migrations[0].additions || 0) + (p.migrations[0].deletions || 0)) / 5000);
         return { ...p, impactScore: totalImpact };
       })
       .sort((a, b) => b.impactScore - a.impactScore)
@@ -983,7 +684,7 @@ function Dashboard() {
       .map(plugin => {
         const migration = plugin.migrations[0];
         const baselineVersion = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline || "0.0";
-        const drift = calculateDrift(baselineVersion);
+        const drift = calculateBaselineDrift(baselineVersion);
         return {
           pluginName: plugin.pluginName,
           gap: drift.gap,
@@ -1069,7 +770,8 @@ function Dashboard() {
   const detailMetrics = useMemo(() => {
     if (!currentlySelectedPlugin || !currentlySelectedPlugin.migrations.length) return null;
     const migration = currentlySelectedPlugin.migrations[0];
-    const checkRunKeys = Object.keys(migration.checkRuns || {});
+    const checkRuns = migration.checkRuns || {};
+    const checkRunKeys = Object.keys(checkRuns);
 
     const healthInsights = checkRunKeys.map(k => {
       const formatted = formatLabel(k);
@@ -1077,7 +779,7 @@ function Dashboard() {
     });
 
     const healthSeverities = checkRunKeys.map(k => {
-      const status = migration.checkRuns[k];
+      const status = checkRuns[k];
       return status === "success" ? "success" : "danger";
     });
 
@@ -1102,7 +804,7 @@ function Dashboard() {
         percentile: myPercentile
       },
       healthLabels: checkRunKeys.map(k => formatLabel(k)),
-      healthData: checkRunKeys.map(k => migration.checkRuns[k] === "success" ? 1 : 0.3),
+      healthData: checkRunKeys.map(k => checkRuns[k] === "success" ? 1 : 0.3),
       healthBenchmarks: checkRunKeys.map(k => ecosystemBenchmarks[k] || 0),
       healthInsights,
       healthSeverities,
@@ -1121,7 +823,7 @@ function Dashboard() {
         { name: "Manual Review", value: 1, insight: "Human verification required for complex changes.", severity: "warning" }
       ],
       findings: checkRunKeys
-        .filter(k => migration.checkRuns[k] !== "success")
+        .filter(k => checkRuns[k] !== "success")
         .map(k => ({
           issue: formatLabel(k),
           recommendation: DIAGNOSTIC_ACTIONS[Object.keys(DIAGNOSTIC_ACTIONS).find(key => k.includes(key)) || "Default"] || "Analyze CI logs for specific failure root cause."
@@ -1131,11 +833,11 @@ function Dashboard() {
           ? [{ task: "Baseline Upgrade", action: DIAGNOSTIC_ACTIONS["Baseline"] }] : []),
         ...(migration.migrationStatus !== "SUCCESS"
           ? [{ task: "Recipe Remediation", action: "Review OpenRewrite 'modernizer' logs and resolve syntax conflicts." }] : []),
-        ...(checkRunKeys.some(k => k.includes("Security")) && migration.checkRuns[checkRunKeys.find(k => k.includes("Security"))!] !== "success"
+        ...(checkRunKeys.some(k => k.includes("Security")) && checkRuns[checkRunKeys.find(k => k.includes("Security"))!] !== "success"
           ? [{ task: "Security Hardening", action: DIAGNOSTIC_ACTIONS["Jenkins Security Scan"] }] : [])
       ]
     };
-  }, [currentlySelectedPlugin]);
+  }, [currentlySelectedPlugin, ecosystemBenchmarks, ecosystemRankingDist]);
 
   const renderCommandBar = () => (
     <div
@@ -1156,6 +858,7 @@ function Dashboard() {
             placeholder="Search modernization registry..."
             value={globalSearch}
             onChange={(e) => setGlobalSearch(e.target.value)}
+            aria-label="Search modernization registry"
           />
         </div>
       </div>
@@ -1350,9 +1053,10 @@ function Dashboard() {
               color: isFullscreen ? 'var(--accent-neon)' : 'var(--text-primary)',
               boxShadow: isFullscreen ? '0 0 16px rgba(130, 201, 30, 0.4)' : 'none',
               transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-              cursor: 'none'
+              cursor: 'pointer'
             }}
             title={isFullscreen ? 'Exit Full Screen (Key: F)' : 'Open in Full Screen (Key: F)'}
+            aria-label={isFullscreen ? 'Exit Full Screen' : 'Open in Full Screen'}
           >
             {isFullscreen ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1380,9 +1084,10 @@ function Dashboard() {
               border: '1px solid var(--card-border)',
               color: 'var(--text-primary)',
               transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-              cursor: 'none'
+              cursor: 'pointer'
             }}
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            aria-label={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
           >
             {theme === 'dark' ? (
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
@@ -1476,6 +1181,7 @@ function Dashboard() {
             </div>
           </div>
 
+        
           <div className="charts-grid reveal-node animate-delay-5" style={{ marginTop: '30px' }}>
             <div className="glass-card chart-card">
               <PieChart
@@ -1499,7 +1205,6 @@ function Dashboard() {
             </div>
           </div>
 
-        
           <div className="strategic-hub reveal-node" style={{ '--delay': '500ms' } as React.CSSProperties}>
             <div className="hub-briefing">
               <div className="system-status-badge">
@@ -2359,26 +2064,34 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="tabs-container reveal-node animate-delay-1" role="navigation" aria-label="Operational Mode Switcher">
+      <div className="tabs-container reveal-node animate-delay-1" role="tablist" aria-label="Operational Mode Switcher">
         <button
+          role="tab"
+          aria-selected={currentlyActiveTab === "Global Overview"}
           onClick={() => setCurrentlyActiveTab("Global Overview")}
           className={`tab-btn ${currentlyActiveTab === "Global Overview" ? "active" : ""}`}
         >
           Overview
         </button>
         <button
+          role="tab"
+          aria-selected={currentlyActiveTab === "Strategic Workbench"}
           onClick={() => setCurrentlyActiveTab("Strategic Workbench")}
           className={`tab-btn ${currentlyActiveTab === "Strategic Workbench" ? "active" : ""}`}
         >
           Workbench
         </button>
         <button
+          role="tab"
+          aria-selected={currentlyActiveTab === "Data Explorer"}
           onClick={() => setCurrentlyActiveTab("Data Explorer")}
           className={`tab-btn ${currentlyActiveTab === "Data Explorer" ? "active" : ""}`}
         >
           Explorer
         </button>
         <button
+          role="tab"
+          aria-selected={currentlyActiveTab === "Methodology"}
           onClick={() => setCurrentlyActiveTab("Methodology")}
           className={`tab-btn ${currentlyActiveTab === "Methodology" ? "active" : ""}`}
         >
@@ -2415,7 +2128,7 @@ function Dashboard() {
                       ...surgeryQueue.map(name => {
                         const plugin = allPluginsWithInsights.find(p => p.pluginName === name);
                         return [
-                          `\n# --- Targeting: ${name} ---`,
+                          `\n# --- Targeting: ${sanitizeShellArg(name, 'plugin')} ---`,
                           ...(plugin?.insight.surgical.commands || [])
                         ].join('\n');
                       })
@@ -2467,9 +2180,10 @@ function Dashboard() {
               padding: '4px 10px',
               fontSize: '11px',
               fontWeight: 'bold',
-              cursor: 'none',
+              cursor: 'pointer',
               marginLeft: '6px'
             }}
+            aria-label="Exit full screen"
           >
             EXIT [F]
           </button>

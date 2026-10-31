@@ -1,6 +1,7 @@
-import React, { useMemo, useRef, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import ReactECharts from "echarts-for-react";
 import * as echarts from "echarts";
+import { escapeHtml } from "../domain/security";
 
 /**
  * ─────────────────────────────────────────────────────────────────────────────
@@ -22,6 +23,13 @@ interface BarChartProperties {
   theme?: 'dark' | 'light';
   yFormatter?: (value: number) => string;
   onItemClick?: (name: string) => void;
+}
+
+interface BarChartTooltipItem {
+  seriesName?: string;
+  name?: string;
+  value?: number;
+  dataIndex?: number;
 }
 
 const SEVERITY_COLORS = {
@@ -47,7 +55,6 @@ const BarChart: React.FC<BarChartProperties> = ({
   onItemClick,
 }) => {
   // ── ECOSYSTEM PERSISTENCE ENGINE ──
-  const prevLabelsRef = useRef<string[]>([]);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
   // Monitor viewport changes for responsive chart scaling
@@ -58,11 +65,6 @@ const BarChart: React.FC<BarChartProperties> = ({
   }, []);
 
   const chartConfiguration = useMemo(() => {
-    // We track the labels reference to detect when the user has filtered/searched.
-    // We ONLY provide startValue on the first render for a given dataset.
-    const isNewData = prevLabelsRef.current !== labels;
-    prevLabelsRef.current = labels;
-
     // Inject semantic coloring for bars
     const mainBarData = data.map((val, idx) => {
       const severity = severities?.[idx];
@@ -116,24 +118,26 @@ const BarChart: React.FC<BarChartProperties> = ({
         borderRadius: 12,
         padding: 16,
         backdropFilter: 'blur(12px)',
-        formatter: (params: any) => {
-          const mainSeries = params.find((p: any) => p.seriesName === 'Current Plugin') || params[0];
-          const benchSeries = params.find((p: any) => p.seriesName === 'Ecosystem Standard');
+        formatter: (params: unknown) => {
+          const list = Array.isArray(params) ? (params as BarChartTooltipItem[]) : [];
+          const mainSeries = list.find((p) => p.seriesName === 'Current Plugin') || list[0] || {};
+          const benchSeries = list.find((p) => p.seriesName === 'Ecosystem Standard');
           
-          const insightText = insights?.[mainSeries.dataIndex];
-          const insightHtml = insightText ? `<div style="margin-top: 10px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 10px; white-space: normal; line-height: 1.5; max-width: 240px;">${insightText}</div>` : '';
+          const dataIndex = mainSeries.dataIndex ?? 0;
+          const insightText = insights?.[dataIndex];
+          const insightHtml = insightText ? `<div style="margin-top: 10px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 10px; white-space: normal; line-height: 1.5; max-width: 240px;">${escapeHtml(insightText)}</div>` : '';
           
-          const benchmarkHtml = benchSeries ? `
+          const benchmarkHtml = benchSeries && typeof benchSeries.value === 'number' ? `
             <div style="display: flex; justify-content: space-between; gap: 20px; margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
               <span style="opacity: 0.6;">ECOSYSTEM_STANDARD:</span>
-              <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'};">${(benchSeries.value * 100).toFixed(0)}% SUCCESS RATE</span>
+              <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'};">${escapeHtml((benchSeries.value * 100).toFixed(0))}% SUCCESS RATE</span>
             </div>
           ` : '';
 
           const statusText = mainSeries.value === 1 ? '<span style="color: #10B981;">ALIGNED</span>' : '<span style="color: #EF4444;">LEGACY / MISSING</span>';
 
           return `<div style="font-family: 'Inter', sans-serif;">
-                    <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px;">${mainSeries.name}</div>
+                    <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px;">${escapeHtml(mainSeries.name || '')}</div>
                     <div style="display: flex; justify-content: space-between; gap: 20px; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
                       <span style="opacity: 0.6;">PLUGIN_STATUS:</span>
                       <span style="font-weight: 700;">${statusText}</span>
@@ -154,10 +158,8 @@ const BarChart: React.FC<BarChartProperties> = ({
         {
           type: 'slider',
           show: true,
-          ...(isNewData ? {
-            startValue: 0,
-            endValue: 14, // 15 bars visible per scroll
-          } : {}),
+          startValue: 0,
+          endValue: 14, // 15 bars visible per scroll
           zoomLock: true,
           height: 12,
           bottom: isMobile ? 10 : 25,
@@ -235,15 +237,15 @@ const BarChart: React.FC<BarChartProperties> = ({
         },
       ],
     };
-  }, [labels, data, benchmarkData, colors, title, rotateLabel, yMax, isMobile, insights, severities, theme]);
+  }, [labels, data, benchmarkData, colors, title, rotateLabel, yMax, yFormatter, isMobile, insights, severities, theme]);
 
   return (
     <ReactECharts
       option={chartConfiguration}
       style={{ height: isMobile ? 300 : 350, width: "100%" }}
       onEvents={{
-        'click': (params: any) => {
-          if (onItemClick) onItemClick(params.name);
+        'click': (params: { name?: string }) => {
+          if (onItemClick && params.name) onItemClick(params.name);
         }
       }}
       notMerge={false}

@@ -120,15 +120,7 @@ body {
     radial-gradient(at 100% 0%, rgba(15, 23, 42, 0.5) 0px, transparent 50%);
   background-attachment: fixed;
   position: relative;
-  cursor: none !important; /* Hide default cursor globally */
 }
-
-/* Enforce no cursor on all elements to prevent "dual cursor" glitch */
-*, *::before, *::after {
-  cursor: none !important;
-}
-
-
 
 #root {
   min-height: 100vh;
@@ -310,5 +302,50 @@ button:active,
 
 /* Ensure interactive elements reset cursor */
 a, button, [role="button"], .clickable {
-  cursor: none;
+  cursor: pointer;
+}
+
+/* ── ACCESSIBILITY: KEYBOARD FOCUS VISIBILITY ── */
+:focus-visible {
+  outline: 2px solid var(--accent-primary, #38d1ff) !important;
+  outline-offset: 3px !important;
+  border-radius: 6px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.tab-btn:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--accent-primary, #38d1ff) !important;
+  outline-offset: 3px !important;
+}
+
+/* ── ACCESSIBILITY: PREFERS-REDUCED-MOTION ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .marquee-content {
+    animation: none !important;
+    white-space: normal !important;
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .reveal-node,
+  .animate-fade-up,
+  .animate-pulse {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }

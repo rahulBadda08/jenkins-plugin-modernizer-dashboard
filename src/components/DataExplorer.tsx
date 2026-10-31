@@ -1,42 +1,6 @@
 import { useState, useEffect } from 'react';
-
-// We copy the exact same TypeScript definitions to stay safe
-type MigrationStatus = "SUCCESS" | "FAILURE" | "PENDING" | "RUNNING" | "ABORTED" | string;
-type PRStatus = "MERGED" | "OPEN" | "CLOSED" | "DRAFT" | string;
-
-interface Migration {
-  migrationName: string;
-  migrationStatus: MigrationStatus;
-  pullRequestStatus: PRStatus;
-  pullRequestUrl: string;
-  tags: string[];
-  checkRuns?: Record<string, string | null>;
-  checkRunsSummary?: string;
-  jenkinsVersion?: string;
-  timestamp: string;
-}
-
-interface PluginInsight {
-  actionInsight: {
-    status: string;
-    severity: 'danger' | 'warning' | 'success';
-    summary: string[];
-    recommendations: string[];
-  };
-  priorities: {
-    severity: { label: string; status: string; color: string };
-    maintenance: { label: string; status: string; color: string };
-    security: { label: string; status: string; color: string };
-  };
-  checklist: Array<{ label: string; value: boolean; description: string }>;
-}
-
-interface PluginData {
-  pluginName: string;
-  pluginRepository: string;
-  migrations: Migration[];
-  insight?: PluginInsight;
-}
+import type { EnrichedPlugin, Migration } from '../domain/types';
+import { sanitizeCsvCell } from '../domain/security';
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -49,7 +13,7 @@ const formatLabel = (str: string) => {
 };
 
 interface DataExplorerProps {
-  plugins: PluginData[];
+  plugins: EnrichedPlugin[];
   onPluginSelect: (pluginName: string) => void;
   externalSearch?: string;
   externalMigrationFilter?: string;
@@ -67,17 +31,17 @@ export default function DataExplorer({
   roadmapList, 
   legacyAlignmentList
 }: DataExplorerProps) {
-  // ── 1. STATE & RESPONSIVENESS ──
+  // ── 1. STATE & PAGINATION ──
   const [currentPage, setCurrentPage] = useState(1);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(false);
   const itemsPerPage = 15;
 
-  // Track window resizing for mobile-card toggle
-  useState(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  });
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // ── 2. DATA CASCADING & RESET ──
   // Reset pagination when the filter changes (plugins prop)
@@ -114,11 +78,13 @@ export default function DataExplorer({
       const ExcelJS = await import('exceljs/dist/exceljs.min.js');
       
       // Initialize standard workbook handling both ESM and CommonJS resolving formats
-      const WorkbookClass = ExcelJS.Workbook || (ExcelJS as any).default?.Workbook || (window as any).ExcelJS?.Workbook;
+      const excelMod = ExcelJS as unknown as { Workbook?: new () => unknown; default?: { Workbook?: new () => unknown } };
+      const win = window as unknown as { ExcelJS?: { Workbook?: new () => unknown } };
+      const WorkbookClass = excelMod.Workbook || excelMod.default?.Workbook || win.ExcelJS?.Workbook;
       if (!WorkbookClass) {
         throw new Error("ExcelJS Workbook constructor failed to resolve from module.");
       }
-      const workbook = new WorkbookClass();
+      const workbook = new (WorkbookClass as unknown as new () => InstanceType<typeof ExcelJS.Workbook>)();
       
       workbook.creator = 'Jenkins Plugin Modernizer Engine';
       workbook.created = new Date();
@@ -191,28 +157,28 @@ export default function DataExplorer({
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       
       const fileSaverModule = await import('file-saver');
-      const saveAs = fileSaverModule.saveAs || fileSaverModule.default?.saveAs || (fileSaverModule as any).default;
+      const saveAs = fileSaverModule.saveAs || fileSaverModule.default?.saveAs || (fileSaverModule as unknown as { default?: { saveAs?: (b: Blob, name: string) => void } }).default?.saveAs;
       if (typeof saveAs !== 'function') throw new Error("FileSaver couldn't be loaded properly.");
       
       saveAs(blob, 'Jenkins_Telemetry_Snapshot.xlsx');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Excel Generation Error:", err);
-      // Fallback alert for the user if processing crashes
-      window.alert("Export Error: " + (err.message || 'The snapshot engine encountered an issue rendering the spreadsheet.'));
+      const msg = err instanceof Error ? err.message : 'The snapshot engine encountered an issue rendering the spreadsheet.';
+      window.alert("Export Error: " + msg);
     }
   };
   const exportToCSV = () => {
     try {
       const headers = ['PLUGIN_NAME', 'MIGRATION_STATUS', 'PR_STATUS', 'REPOSITORY_ACTION_LINK', 'LAST_ANALYSIS_DATE'];
       const rows = filteredPlugins.map(plugin => {
-        const migration = plugin.migrations?.[0];
+        const migration = plugin.activeMigration || plugin.migrations?.[0];
         const prUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
         return [
-          `"${plugin.pluginName}"`,
-          `"${(migration?.migrationStatus || 'UNKNOWN').toUpperCase()}"`,
-          `"${(migration?.pullRequestStatus || 'UNKNOWN').replace("_", " ").toUpperCase()}"`,
-          `"${prUrl}"`,
-          `"${formatTimestamp(migration?.timestamp || "")}"`
+          sanitizeCsvCell(plugin.pluginName),
+          sanitizeCsvCell((migration?.migrationStatus || 'UNKNOWN').toUpperCase()),
+          sanitizeCsvCell((migration?.pullRequestStatus || 'UNKNOWN').replace(/_/g, ' ').toUpperCase()),
+          sanitizeCsvCell(prUrl),
+          sanitizeCsvCell(formatTimestamp(migration?.timestamp || ""))
         ];
       });
 
@@ -226,9 +192,11 @@ export default function DataExplorer({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (err: any) {
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
       console.error("CSV Generation Error:", err);
-      window.alert("Export Error: " + (err.message || 'CSV generation failed.'));
+      const msg = err instanceof Error ? err.message : 'CSV generation failed.';
+      window.alert("Export Error: " + msg);
     }
   };
 
@@ -243,9 +211,11 @@ export default function DataExplorer({
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } catch (err: any) {
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
       console.error("JSON Generation Error:", err);
-      window.alert("Export Error: " + (err.message || 'JSON generation failed.'));
+      const msg = err instanceof Error ? err.message : 'JSON generation failed.';
+      window.alert("Export Error: " + msg);
     }
   };
 
@@ -270,6 +240,7 @@ export default function DataExplorer({
             className="tab-btn mini" 
             style={{ flex: 1, display: 'flex', justifyContent: 'center', fontSize: '11px' }}
             title="Export to Microsoft Excel"
+            aria-label="Export dataset to Excel (.xlsx)"
           >
             XLSX
           </button>
@@ -278,6 +249,7 @@ export default function DataExplorer({
             className="tab-btn mini" 
             style={{ flex: 1, display: 'flex', justifyContent: 'center', fontSize: '11px' }}
             title="Export to CSV"
+            aria-label="Export dataset to CSV (.csv)"
           >
             CSV
           </button>
@@ -286,6 +258,7 @@ export default function DataExplorer({
             className="tab-btn mini" 
             style={{ flex: 1, display: 'flex', justifyContent: 'center', fontSize: '11px' }}
             title="Export to JSON"
+            aria-label="Export dataset to JSON (.json)"
           >
             JSON
           </button>
@@ -312,8 +285,8 @@ export default function DataExplorer({
               </tr>
             </thead>
             <tbody>
-              {paginatedData.map((plugin: any) => {
-                const migration = plugin.migrations?.[0] || {} as Migration;
+              {paginatedData.map((plugin: EnrichedPlugin) => {
+                const migration = plugin.activeMigration || plugin.migrations?.[0] || {} as Migration;
                 const priority = plugin.insight?.priorities?.severity || { color: 'var(--text-secondary)', status: 'Unknown' };
                 
                 return (
@@ -439,6 +412,7 @@ export default function DataExplorer({
             disabled={currentPage === 1}
             onClick={() => setCurrentPage(prev => prev - 1)}
             style={{ opacity: currentPage === 1 ? 0.3 : 1, padding: isMobile ? '8px 20px' : '10px 24px' }}
+            aria-label="Previous page"
           >
             Prev
           </button>
@@ -448,6 +422,7 @@ export default function DataExplorer({
             disabled={currentPage >= totalPages}
             onClick={() => setCurrentPage(prev => prev + 1)}
             style={{ opacity: currentPage >= totalPages ? 0.3 : 1, padding: isMobile ? '8px 20px' : '10px 24px' }}
+            aria-label="Next page"
           >
             Next
           </button>
