@@ -3,63 +3,83 @@ import { selectActiveMigration } from './migrationPolicy';
 import { calculateBaselineDrift, isVersionOutdated } from './baselineParser';
 import { sanitizeShellArg } from './security';
 
+export const SCORING_PENALTIES = {
+  MIGRATION_FAILURE: 30,
+  MIGRATION_ABORTED: 20,
+  MIGRATION_PENDING_RUNNING: 10,
+  MIGRATION_UNKNOWN: 5,
+  CI_EXPLICIT_FAILURE: 25,
+  CI_UNREPORTED: 5,
+  DEPRECATED_TAG: 20,
+  BOM_EXPLICIT_FAILURE: 15,
+  BOM_UNREPORTED_OR_UNALIGNED: 5,
+  PR_CLOSED_UNMERGED: 15,
+  PR_UNREPORTED: 5,
+  BASELINE_OUTDATED: 20,
+  BASELINE_UNKNOWN: 5,
+} as const;
+
+export const MIN_HEALTH_SCORE = 5;
+export const MAX_HEALTH_SCORE = 100;
+
 export function calculateHealthScore(plugin: PluginData): number {
   const migration = selectActiveMigration(plugin.migrations);
-  if (!migration) return 0;
+  if (!migration) return MIN_HEALTH_SCORE;
 
-  let score = 100;
+  let score = MAX_HEALTH_SCORE;
   const status = migration.migrationStatus.toLowerCase();
   const prStatus = migration.pullRequestStatus.toLowerCase();
   const checkRuns = migration.checkRuns || {};
   const summary = (migration.checkRunsSummary || '').toLowerCase();
 
   // 1. Migration Execution Outcome
-  if (status === 'failure') score -= 30;
-  else if (status === 'aborted') score -= 20;
-  else if (status === 'pending' || status === 'running') score -= 10;
-  else if (status === 'unknown') score -= 5;
+  if (status === 'failure') score -= SCORING_PENALTIES.MIGRATION_FAILURE;
+  else if (status === 'aborted') score -= SCORING_PENALTIES.MIGRATION_ABORTED;
+  else if (status === 'pending' || status === 'running') score -= SCORING_PENALTIES.MIGRATION_PENDING_RUNNING;
+  else if (status === 'unknown') score -= SCORING_PENALTIES.MIGRATION_UNKNOWN;
 
-  // 2. Automated CI Validation (Distinguish failure from unknown/unreported)
+  // 2. Automated CI Validation (Distinguish explicit failure from unrecorded telemetry)
   if (summary === 'failure' || summary === 'fail') {
-    score -= 25;
+    score -= SCORING_PENALTIES.CI_EXPLICIT_FAILURE;
   } else if (!summary || summary === 'unknown') {
-    // Unreported telemetry is not penalized as catastrophic failure
-    score -= 5;
+    score -= SCORING_PENALTIES.CI_UNREPORTED;
   }
 
   // 3. Deprecation and Architecture Alignment
   const hasDeprecated = (migration.tags || []).some(t => t.toLowerCase() === 'deprecated');
-  if (hasDeprecated) score -= 20;
+  if (hasDeprecated) score -= SCORING_PENALTIES.DEPRECATED_TAG;
 
   const bomStatus = (checkRuns['BOM'] || checkRuns['Bom'] || '').toLowerCase();
-  if (bomStatus === 'failure') {
-    score -= 15;
-  } else if (bomStatus !== 'success') {
-    score -= 5;
+  if (bomStatus === 'failure' || bomStatus === 'fail') {
+    score -= SCORING_PENALTIES.BOM_EXPLICIT_FAILURE;
+  } else if (bomStatus !== 'success' && bomStatus !== 'pass') {
+    score -= SCORING_PENALTIES.BOM_UNREPORTED_OR_UNALIGNED;
   }
 
   // 4. Maintenance / PR Status
   if (prStatus === 'closed') {
-    score -= 15;
+    score -= SCORING_PENALTIES.PR_CLOSED_UNMERGED;
   } else if (prStatus === 'unknown') {
-    score -= 5;
+    score -= SCORING_PENALTIES.PR_UNREPORTED;
   }
 
   // 5. Baseline Version Checks
-  const outdated = isVersionOutdated(migration.jenkinsVersion);
+  const effectiveBaseline = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline;
+  const outdated = isVersionOutdated(effectiveBaseline);
   if (outdated === true) {
-    score -= 20;
+    score -= SCORING_PENALTIES.BASELINE_OUTDATED;
   } else if (outdated === 'unknown') {
-    score -= 5;
+    score -= SCORING_PENALTIES.BASELINE_UNKNOWN;
   }
 
-  return Math.max(5, Math.min(100, score));
+  return Math.max(MIN_HEALTH_SCORE, Math.min(MAX_HEALTH_SCORE, score));
 }
 
 export function getRemediationCommands(checklist: ChecklistItem[], pluginName: string): string[] {
   const commands: string[] = [];
   const safePluginName = sanitizeShellArg(pluginName, 'plugin');
-  const fails = checklist.filter(c => c.status === 'failed' || !c.value);
+  // Strictly target confirmed failures (never trigger commands on missing/unknown telemetry)
+  const fails = checklist.filter(c => c.status === 'failed');
 
   if (fails.some(f => f.label.includes('BOM'))) {
     commands.push(`mvn jenkins-plugin-modernizer:modernize -Drecipe=BomAlignment`);
@@ -75,7 +95,12 @@ export function getRemediationCommands(checklist: ChecklistItem[], pluginName: s
   }
 
   if (commands.length === 0) {
-    commands.push('# No immediate technical remediation required. Baseline aligned.');
+    const hasUnknown = checklist.some(c => c.status === 'unknown');
+    if (hasUnknown) {
+      commands.push('# No explicit failures detected. Telemetry partially reported.');
+    } else {
+      commands.push('# No immediate technical remediation required. Baseline aligned.');
+    }
   }
   return commands;
 }
@@ -91,50 +116,67 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
   };
 
   const checkRuns = migration.checkRuns || {};
-  const checkRunKeys = Object.keys(checkRuns);
   const status = migration.migrationStatus.toLowerCase();
   const prStatus = migration.pullRequestStatus.toLowerCase();
-  const ver = migration.jenkinsVersion;
+  const ver = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline;
   const summary = (migration.checkRunsSummary || '').toLowerCase();
 
   const isOutdated = isVersionOutdated(ver) === true;
-  const hasSecurityRisk = checkRunKeys.some(k => k.toLowerCase().includes('security')) &&
-    checkRuns[checkRunKeys.find(k => k.toLowerCase().includes('security'))!] !== 'success';
-  const hasCiFailure = summary === 'failure' || summary === 'fail';
-  const hasNoPR = prStatus === 'unknown' || prStatus === '';
 
-  // Checklist
-  const bomRun = (checkRuns['BOM'] || checkRuns['Bom'] || '').toLowerCase();
-  const parentPomRun = (checkRuns['Parent Pom'] || checkRuns['Parent POM'] || '').toLowerCase();
+  // Case-insensitive checkRuns analysis
+  const checkRunEntries = Object.entries(checkRuns).map(([k, v]) => ({
+    key: k.toLowerCase(),
+    value: (v || '').toLowerCase(),
+  }));
+  const secEntry = checkRunEntries.find(e => e.key.includes('security'));
+  const hasSecurityCheck = !!secEntry;
+  const hasSecurityRisk = hasSecurityCheck && (secEntry.value === 'failure' || secEntry.value === 'fail');
+  const isSecurityPassed = hasSecurityCheck && (secEntry.value === 'success' || secEntry.value === 'pass');
+
+  const hasCiFailure = summary === 'failure' || summary === 'fail';
+  const hasCiSuccess = summary === 'success' || summary === 'pass';
+  const hasNoPR = prStatus === 'unknown' || prStatus === '';
+  const isDraft = prStatus === 'draft';
+
+  // Checklist: 3-State Semantics (passed, failed, unknown)
+  const bomEntry = checkRunEntries.find(e => e.key.includes('bom'));
+  const bomStatus = bomEntry ? bomEntry.value : '';
+  const isBomPassed = bomStatus === 'success' || bomStatus === 'pass';
+  const isBomFailed = bomStatus === 'failure' || bomStatus === 'fail';
+
+  const parentPomEntry = checkRunEntries.find(e => e.key.includes('parent'));
+  const parentPomStatus = parentPomEntry ? parentPomEntry.value : '';
+  const isParentPomPassed = parentPomStatus === 'success' || parentPomStatus === 'pass';
+  const isParentPomFailed = parentPomStatus === 'failure' || parentPomStatus === 'fail';
 
   const checklist: ChecklistItem[] = [
     {
       label: 'BOM Aligned',
-      value: bomRun === 'success',
-      status: bomRun === 'success' ? 'passed' : bomRun === 'failure' ? 'failed' : 'unknown',
+      value: isBomPassed,
+      status: isBomPassed ? 'passed' : isBomFailed ? 'failed' : 'unknown',
       description: 'Bill of Materials dependency management',
     },
     {
       label: 'Latest Parent POM',
-      value: parentPomRun === 'success',
-      status: parentPomRun === 'success' ? 'passed' : parentPomRun === 'failure' ? 'failed' : 'unknown',
+      value: isParentPomPassed,
+      status: isParentPomPassed ? 'passed' : isParentPomFailed ? 'failed' : 'unknown',
       description: 'Modern Jenkins build configuration',
     },
     {
       label: 'CI Configured',
-      value: summary === 'success',
-      status: summary === 'success' ? 'passed' : hasCiFailure ? 'failed' : 'unknown',
+      value: hasCiSuccess,
+      status: hasCiSuccess ? 'passed' : hasCiFailure ? 'failed' : 'unknown',
       description: 'Automated verification & passing tests',
     },
     {
       label: 'Active Maintenance',
-      value: !hasNoPR && prStatus !== 'closed',
-      status: (!hasNoPR && prStatus !== 'closed') ? 'passed' : hasNoPR ? 'unknown' : 'failed',
+      value: prStatus === 'merged' || prStatus === 'open' || isDraft,
+      status: (prStatus === 'merged' || prStatus === 'open' || isDraft) ? 'passed' : prStatus === 'closed' ? 'failed' : 'unknown',
       description: 'Recent Pull Request activity & review',
     },
   ];
 
-  // Priorities
+  // Priorities with accurate status classification
   const prioritySeverity: PriorityItem = {
     label: 'Migration Status',
     status: status === 'success' ? 'Passing' : status === 'failure' ? 'Failed' : status === 'unknown' ? 'Unknown' : 'Pending',
@@ -143,14 +185,14 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
 
   const priorityMaintenance: PriorityItem = {
     label: 'Maintenance',
-    status: prStatus === 'merged' ? 'Modernized' : prStatus === 'open' ? 'In Review' : prStatus === 'unknown' ? 'Unreported' : 'Closed',
-    color: prStatus === 'merged' ? '#10B981' : prStatus === 'open' ? '#3B82F6' : prStatus === 'unknown' ? '#94A3B8' : '#F59E0B',
+    status: prStatus === 'merged' ? 'Modernized' : prStatus === 'open' ? 'In Review' : isDraft ? 'Draft PR' : prStatus === 'unknown' ? 'Unreported' : 'Closed',
+    color: prStatus === 'merged' ? '#10B981' : prStatus === 'open' ? '#3B82F6' : isDraft ? '#A855F7' : prStatus === 'unknown' ? '#94A3B8' : '#F59E0B',
   };
 
   const prioritySecurity: PriorityItem = {
     label: 'Security & Core',
-    status: hasSecurityRisk ? 'Vulnerabilities' : isOutdated ? 'Outdated Core' : 'Secured',
-    color: hasSecurityRisk ? '#EF4444' : isOutdated ? '#F59E0B' : '#10B981',
+    status: hasSecurityRisk ? 'Vulnerabilities' : isSecurityPassed ? 'Secured' : isOutdated ? 'Outdated Core' : 'Not Reported',
+    color: hasSecurityRisk ? '#EF4444' : isSecurityPassed ? '#10B981' : isOutdated ? '#F59E0B' : '#94A3B8',
   };
 
   // Action Insight
@@ -208,13 +250,13 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
       },
       ci: {
         label: 'CI Integrity',
-        value: summary === 'success',
-        display: summary === 'success' ? 'CONFIGURED' : summary === '' ? 'UNKNOWN' : 'FAILING',
+        value: hasCiSuccess,
+        display: hasCiSuccess ? 'CONFIGURED' : (summary === '' || summary === 'unknown') ? 'NOT REPORTED' : 'FAILING',
       },
       pr: {
         label: 'Maintenance',
         value: !hasNoPR && prStatus !== 'closed',
-        display: prStatus === 'merged' ? 'MERGED' : prStatus === 'open' ? 'OPEN PR' : prStatus === 'unknown' ? 'NO PR' : 'CLOSED',
+        display: prStatus === 'merged' ? 'MERGED' : prStatus === 'open' ? 'OPEN PR' : isDraft ? 'DRAFT PR' : prStatus === 'unknown' ? 'NO PR' : 'CLOSED',
       },
     },
     surgical: {

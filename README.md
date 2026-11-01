@@ -11,8 +11,8 @@ A high-fidelity, public analytics dashboard for visualizing the health, moderniz
 
 ---
 
-## 🎯 Project Goals (GSoC 2026)
-This project is built following the [Jenkins GSoC 2026 "Plugin Modernizer Stats Visualization" Roadmap](https://www.jenkins.io/projects/gsoc/2026/project-ideas/plugin-modernizer-stats-visualization/):
+## 🎯 Project Goals
+An independent community project inspired by the [Jenkins GSoC 2026 "Plugin Modernizer Stats Visualization" Roadmap](https://www.jenkins.io/projects/gsoc/2026/project-ideas/plugin-modernizer-stats-visualization/):
 - **Build-Time Ingestion**: Fetches and validates raw plugin reports from `jenkins-infra/metadata-plugin-modernizer` at build time to provide an instant, statically hosted web experience with zero backend dependencies.
 - **Actionable Intelligence**: Evaluates ecosystem-wide health scores and provides per-plugin diagnostic checklists (Parent POM, BOM alignment, Jenkins core baseline drift, CI validation).
 - **Client-Side Analytical Engine**: Real-time multi-dimensional filtering, searching, and export capabilities.
@@ -44,15 +44,16 @@ The dashboard implements a **Domain-Driven Static Intelligence** architecture:
 │   └── global.css             # Theme tokens, keyboard focus visibility & reduced motion support
 └── .github/workflows/
     ├── deploy-pages.yml       # Canonical CI/CD pipeline with automated Quality Gates
-    └── sync-plugin-data.yml   # Scheduled nightly data ingestion & commit automation
+    └── sync-plugin-data.yml   # Scheduled nightly data ingestion, commit & deployment automation
 ```
 
 ### Baseline Drift Radar
 - A dedicated **Baseline Drift Radar** in the **Global Overview** tab segments plugins into:
-  - `Critical Legacy (<2.440)`
-  - `Needs LTS Upgrade (2.440-2.451)`
-  - `Aligned (>=2.452)`
-- The radar evaluates baseline fields (`jenkinsVersion`, `effectiveBaseline`, `jenkinsBaseline`, `targetBaseline`) with safe fallbacks for incomplete records.
+  - `Critical Legacy (<2.440)`: Below minimum modernization runtime baseline
+  - `Needs LTS Upgrade (2.440-2.579)`: Meets minimum baseline, but behind current 2026 LTS (2.580.2)
+  - `Aligned (>=2.580)`: Aligned with current Jenkins LTS baseline expectations
+  - `Unspecified / Missing`: Unreported core telemetry
+- Evaluates baseline fields (`jenkinsVersion`, `effectiveBaseline`, `jenkinsBaseline`, `targetBaseline`) with safe fallbacks for incomplete records.
 - Clicking a radar segment opens **Data Explorer** with that baseline cohort pre-filtered, while the companion chart highlights the highest drift targets for direct plugin drill-down.
 
 ---
@@ -74,12 +75,12 @@ $$\text{Health Score} = 100 - \sum \text{Penalties}$$
    - Missing / Unreported Telemetry: -5 points *(avoids misclassifying unreported CI as fatal failure)*
 3. **Deprecation & Architecture**:
    - Tagged `deprecated`: -20 points
-   - BOM Alignment Failed: -15 points (unaligned: -5 points)
+   - BOM Alignment Failed: -15 points (unaligned / unreported: -5 points)
 4. **Maintenance Activity**:
    - Pull Request Closed without Merge: -15 points
    - Unreported PR status: -5 points
 5. **Jenkins Baseline Version Drift**:
-   - Jenkins Core below current LTS threshold (`< 2.440`): -20 points
+   - Jenkins Core below minimum supported threshold (`< 2.440`): -20 points
    - Unspecified / Unparseable version: -5 points *(flagged as `unspecified` rather than false `critical`)*
 
 ---
@@ -90,14 +91,16 @@ $$\text{Health Score} = 100 - \sum \text{Penalties}$$
 - **CSV Formula Injection Defense**: Spreadsheet export fields are sanitized via `sanitizeCsvCell()` to neutralize execution of formulas (`=`, `+`, `-`, `@`, `\t`, `\r`) in Excel / Calc.
 - **Command Sanitization**: Auto-generated CLI remediation scripts sanitize repository and plugin names (`sanitizeShellArg()`) to prevent shell injection.
 - **Memory Safety**: Object URLs created during JSON and CSV client-side exports are explicitly released via `URL.revokeObjectURL()`.
+- **Automated CI Dependency Audit**: `npm audit --omit=dev --audit-level=high` runs automatically in CI quality gates, ensuring zero high/critical vulnerabilities.
 
 ---
 
 ## ♿ Accessibility & User Experience
 
 - **Keyboard Focus**: Prominent `:focus-visible` outline rings across all interactive controls.
+- **Accessible Tabs**: Full WAI-ARIA tab pattern with `aria-controls`, `role="tabpanel"`, and arrow-key navigation (`ArrowLeft`, `ArrowRight`, `Home`, `End`).
 - **Reduced Motion**: Full support for `@media (prefers-reduced-motion: reduce)`, pausing kinetic marquees and eliminating heavy animations for sensitive users.
-- **Screen Reader Support**: Accessible `role="tablist"` / `role="tab"` attributes with `aria-selected`, and explicit `aria-label` tags on all icon controls.
+- **Semantic Elements**: Semantic button controls with descriptive `aria-label` tags on all icon and table controls.
 - **Native Cursor Restored**: Standard system mouse cursor behavior restored across all views.
 
 ---
@@ -137,7 +140,10 @@ npx tsc -b
 # 3. Run ESLint across all source files
 npx eslint .
 
-# 4. Compile production build
+# 4. Run dependency security audit
+npm audit --audit-level=high
+
+# 5. Compile production build
 npm run build
 ```
 
@@ -147,16 +153,16 @@ npm run build
 
 1. **`deploy-pages.yml` (Canonical Deployment)**:
    - Triggers on every push to `main` and via `workflow_dispatch`.
-   - Executes automated Quality Gates (`eslint`, `tsc`, `vitest`).
+   - Executes automated Quality Gates (`npm audit`, `eslint`, `tsc`, `vitest`).
    - Compiles production assets and publishes to GitHub Pages using pinned actions.
-2. **`sync-plugin-data.yml` (Scheduled Ingestion)**:
+2. **`sync-plugin-data.yml` (Scheduled Ingestion & Autonomous Deployment)**:
    - Runs daily at Midnight UTC (`0 0 * * *`).
    - Downloads 400+ plugin reports, enforces a 95% minimum success threshold, produces atomic datasets + manifest, and commits changes.
-   - Pushing the new commit automatically triggers `deploy-pages.yml` without duplicate deployments or race conditions.
+   - Automatically builds and deploys to GitHub Pages directly within the workflow whenever new data is committed.
 
 ---
 
 ## 📄 License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-*Part of the Jenkins GSoC 2026 Initiative.*
+*An independent community project inspired by the Jenkins GSoC 2026 Plugin Modernizer Stats Visualization project idea.*

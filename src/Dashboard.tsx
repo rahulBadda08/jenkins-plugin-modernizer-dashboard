@@ -18,15 +18,16 @@ import { validatePluginDataset } from "./domain/validation";
 import { selectActiveMigration } from "./domain/migrationPolicy";
 import {
   LTS_BASELINE,
+  MINIMUM_SUPPORTED_BASELINE,
   OUTDATED_MINOR_THRESHOLD,
   BASELINE_BUCKET_META,
   getBaselineBucket,
-  getBaselineBucketByToken,
   getMigrationBaselineMinor,
   calculateBaselineDrift,
   type BaselineBucket,
 } from "./domain/baselineParser";
-import { calculateHealthScore, getPluginInsight } from "./domain/scoring";
+import { calculateHealthScore, getPluginInsight, SCORING_PENALTIES } from "./domain/scoring";
+import { filterPlugins } from "./domain/selectors";
 import { sanitizeShellArg } from "./domain/security";
 
 const formatLabel = (str: string) => {
@@ -67,7 +68,7 @@ const DIAGNOSTIC_ACTIONS: Record<string, string> = {
 };
 
 // ── COMMERCIAL TELEMETRY HEADER ──
-const MarqueeHeader: React.FC<{ text: string; style?: React.CSSProperties }> = ({ text, style }) => {
+const MarqueeHeader: React.FC<{ text: string; count?: number; style?: React.CSSProperties }> = ({ text, count, style }) => {
   return (
     <div
       className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2.5 text-xs font-mono text-slate-300 backdrop-blur-md mb-6"
@@ -80,7 +81,7 @@ const MarqueeHeader: React.FC<{ text: string; style?: React.CSSProperties }> = (
       <div className="flex items-center gap-3 text-slate-400 text-[11px]">
         <span>TELEMETRY STREAM: SYNCHRONIZED</span>
         <span className="text-slate-700">|</span>
-        <span>431 PLUGINS INDEXED</span>
+        <span>{count !== undefined ? `${count} PLUGINS INDEXED` : 'ECOSYSTEM SYNCHRONIZED'}</span>
       </div>
     </div>
   );
@@ -441,54 +442,17 @@ function Dashboard() {
     };
   }, [pluginsWithValidMigrationData, topicFilter, prFilter, severityFilter, allPluginsData.length]);
 
-  // ── THE FILTER PIVOT ENGINE ──
+  // ── THE FILTER PIVOT ENGINE (Domain-Driven Selector Integration) ──
   const filteredEcosystem = useMemo(() => {
-    return pluginsWithValidMigrationData.filter(plugin => {
-      const migration = plugin.migrations[0];
-      if (!migration) return false;
-
-      // Search Match (Support Strategic Keywords)
-      let matchesSearch = true;
-      if (globalSearch) {
-        if (globalSearch === "ROADMAP_TOP_20") {
-          matchesSearch = workbenchMetrics?.roadmapList?.includes(plugin.pluginName) || false;
-        } else if (globalSearch === "LEGACY_BASELINE") {
-          matchesSearch = workbenchMetrics?.legacyAlignmentNames?.includes(plugin.pluginName) || false;
-        } else if (globalSearch.startsWith("BASELINE_")) {
-          const targetBucket = getBaselineBucketByToken(globalSearch);
-          const pluginBucket = getBaselineBucket(getMigrationBaselineMinor(migration));
-          matchesSearch = !!targetBucket && pluginBucket === targetBucket;
-        } else {
-          matchesSearch = plugin.pluginName.toLowerCase().includes(globalSearch.toLowerCase());
-        }
-      }
-      if (!matchesSearch) return false;
-
-      // Topic Match
-      const matchesTopic = topicFilter === "ALL" || (migration.tags || []).includes(topicFilter);
-      if (!matchesTopic) return false;
-
-      // PR Match
-      let latestPrStatus = (migration.pullRequestStatus || "UNKNOWN").toUpperCase();
-      if (latestPrStatus === "FAILURE") latestPrStatus = "FAIL";
-      // Synchronize DRAFT to UNKNOWN
-      if (latestPrStatus === "DRAFT") latestPrStatus = "UNKNOWN";
-
-      const matchesPR = prFilter === "ALL" || latestPrStatus === prFilter.toUpperCase();
-      if (!matchesPR) return false;
-
-      // Severity Match
-      const status = (migration.migrationStatus || "").toLowerCase();
-      const ver = migration.jenkinsVersion || "0.0";
-      const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
-
-      if (severityFilter === "CRITICAL") return status === "fail" || status === "failure";
-      if (severityFilter === "WARNING") return isOutdated || status === "aborted";
-      if (severityFilter === "OPTIMIZED") return status === "success";
-
-      return true;
+    return filterPlugins(allPluginsWithInsights, {
+      globalSearch,
+      topicFilter,
+      prFilter,
+      severityFilter,
+      roadmapList: workbenchMetrics?.roadmapList,
+      legacyAlignmentNames: workbenchMetrics?.legacyAlignmentNames,
     });
-  }, [pluginsWithValidMigrationData, globalSearch, severityFilter, topicFilter, prFilter, workbenchMetrics]);
+  }, [allPluginsWithInsights, globalSearch, topicFilter, prFilter, severityFilter, workbenchMetrics]);
 
   const activateRoadmap = () => {
     isStrategicNavRef.current = true;
@@ -640,8 +604,10 @@ function Dashboard() {
       .filter(p => !p.insight.issueBreakdown.deprecated.value) // Focus on active plugins for maximum impact
       .map(p => {
         const driftFactor = p.insight.surgical.drift.gap;
-        const failFactor = p.insight.checklist.filter(c => !c.value).length * 10;
-        const totalImpact = (driftFactor + failFactor) * (1 + ((p.migrations[0].additions || 0) + (p.migrations[0].deletions || 0)) / 5000);
+        const failFactor = p.insight.checklist.filter(c => c.status === 'failed').length * 10;
+        const intensity = ((p.activeMigration?.additions || p.migrations[0]?.additions || 0) +
+          (p.activeMigration?.deletions || p.migrations[0]?.deletions || 0));
+        const totalImpact = (driftFactor + failFactor) * (1 + intensity / 5000);
         return { ...p, impactScore: totalImpact };
       })
       .sort((a, b) => b.impactScore - a.impactScore)
@@ -664,7 +630,8 @@ function Dashboard() {
     const bucketPlugins: Record<BaselineBucket, string[]> = {
       critical: [],
       warning: [],
-      aligned: []
+      aligned: [],
+      unspecified: []
     };
 
     filteredEcosystem.forEach(plugin => {
@@ -1200,6 +1167,7 @@ function Dashboard() {
                 title="Highest Baseline Drift Targets"
                 theme={theme}
                 rotateLabel={35}
+                tooltipMode="drift"
                 onItemClick={handleDrillDown}
               />
             </div>
@@ -1334,10 +1302,10 @@ function Dashboard() {
           <div className="reveal-node animate-delay-5" style={{ marginTop: '32px' }}>
             <div className="hub-briefing" style={{ marginBottom: '24px' }}>
               <div className="system-status-badge">
-                <span className="pulse-dot danger"></span> Immediate Action Required
+                <span className="pulse-dot danger"></span> Strategic Prioritization
               </div>
               <h2 className="hub-title" style={{ fontSize: '24px' }}>High Impact <span className="mono text-accent">Targets</span></h2>
-              <p className="hub-subtitle">Top 5 entities identified with maximum modernization ROI.</p>
+              <p className="hub-subtitle">Top 5 entities identified with the highest Modernization Impact Index.</p>
             </div>
             
             <div className="task-grid">
@@ -1355,7 +1323,7 @@ function Dashboard() {
                       <div className="task-telemetry">
                         <div className="telemetry-item">
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="3"><path d="M12 2v20M2 12h20" /></svg>
-                          <span className="hero-desc mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', fontWeight: 700, letterSpacing: '0.5px' }}>{target.impactScore.toFixed(0)} ROI</span>
+                          <span className="hero-desc mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', fontWeight: 700, letterSpacing: '0.5px' }}>{target.impactScore.toFixed(0)} IMPACT INDEX</span>
                         </div>
                         <div style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.08)' }}></div>
                         <div className="telemetry-item">
@@ -1365,7 +1333,9 @@ function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="task-badge success">CRITICAL_TARGET</div>
+                  <div className={`task-badge ${target.impactScore > 100 ? 'danger' : target.impactScore > 40 ? 'warning' : 'success'}`}>
+                    {target.impactScore > 100 ? 'HIGH_PRIORITY' : target.impactScore > 40 ? 'MODERATE_PRIORITY' : 'ALIGNED_TARGET'}
+                  </div>
                 </div>
               ))}
             </div>
@@ -1936,8 +1906,8 @@ function Dashboard() {
                   LTS Baseline Logic
                 </h3>
                 <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
-                  The system anchors every metric against the current **Jenkins LTS Baseline** (currently <code className="mono">{LTS_BASELINE}</code>). 
-                  Any plugin falling below this line is flagged for **Ecosystem Drift**.
+                  The system anchors every metric against the current **Jenkins LTS Baseline** (<code className="mono">{LTS_BASELINE}</code>) and runtime minimum (<code className="mono">{MINIMUM_SUPPORTED_BASELINE}</code>). 
+                  Any plugin falling below the minimum threshold is flagged for **Critical Legacy Drift**.
                 </p>
               </div>
 
@@ -1946,7 +1916,7 @@ function Dashboard() {
                   Criticality Matrix
                 </h3>
                 <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
-                  The Drift Gap is calculated by minor version distance:
+                  The Drift Gap is calculated by minor version distance from LTS:
                   <ul style={{ marginTop: '12px', listStyle: 'none', padding: 0 }}>
                     <li>🔴 <strong>Critical</strong>: Gap &gt; 50 releases.</li>
                     <li>🟠 <strong>Moderate</strong>: Gap &gt; 20 releases.</li>
@@ -1960,11 +1930,14 @@ function Dashboard() {
                   Health Index Calculation
                 </h3>
                 <p style={{ opacity: 0.8, lineHeight: '1.6' }}>
-                  A plugin starts with a score of <strong>100</strong>. A deduction is applied for:
-                  <ul style={{ marginTop: '12px', listStyle: 'none', padding: 0 }}>
-                    <li style={{ marginBottom: '4px' }}>📉 <strong>-25</strong>: Failed migration.</li>
-                    <li style={{ marginBottom: '4px' }}>🧬 <strong>-15</strong>: Missing BOM.</li>
-                    <li style={{ marginBottom: '4px' }}>🛡️ <strong>-15</strong>: Security scan failure.</li>
+                  Plugins start at <strong>100</strong> (bounded to 5–100). Deductions are applied for confirmed issues:
+                  <ul style={{ marginTop: '12px', listStyle: 'none', padding: 0, fontSize: '13px' }}>
+                    <li style={{ marginBottom: '4px' }}>📉 <strong>-{SCORING_PENALTIES.MIGRATION_FAILURE}</strong>: Migration execution failure.</li>
+                    <li style={{ marginBottom: '4px' }}>🛑 <strong>-{SCORING_PENALTIES.CI_EXPLICIT_FAILURE}</strong>: Automated CI validation failure.</li>
+                    <li style={{ marginBottom: '4px' }}>⚠️ <strong>-{SCORING_PENALTIES.DEPRECATED_TAG}</strong>: Flagged with deprecated tag.</li>
+                    <li style={{ marginBottom: '4px' }}>🧬 <strong>-{SCORING_PENALTIES.BOM_EXPLICIT_FAILURE}</strong>: BOM alignment failure.</li>
+                    <li style={{ marginBottom: '4px' }}>🏛️ <strong>-{SCORING_PENALTIES.BASELINE_OUTDATED}</strong>: Legacy core baseline (&lt; {OUTDATED_MINOR_THRESHOLD}).</li>
+                    <li style={{ marginBottom: '4px' }}>📬 <strong>-{SCORING_PENALTIES.PR_CLOSED_UNMERGED}</strong>: PR closed without merge.</li>
                   </ul>
                 </p>
               </div>
@@ -2064,9 +2037,35 @@ function Dashboard() {
         </div>
       </div>
 
-      <div className="tabs-container reveal-node animate-delay-1" role="tablist" aria-label="Operational Mode Switcher">
+      <div 
+        className="tabs-container reveal-node animate-delay-1" 
+        role="tablist" 
+        aria-label="Operational Mode Switcher"
+        onKeyDown={(e) => {
+          const PRIMARY_TABS = ["Global Overview", "Strategic Workbench", "Data Explorer", "Methodology"] as const;
+          const currentIndex = PRIMARY_TABS.indexOf(currentlyActiveTab as typeof PRIMARY_TABS[number]);
+          if (currentIndex === -1) return;
+          if (e.key === "ArrowRight") {
+            e.preventDefault();
+            const nextIndex = (currentIndex + 1) % PRIMARY_TABS.length;
+            setCurrentlyActiveTab(PRIMARY_TABS[nextIndex]);
+          } else if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            const prevIndex = (currentIndex - 1 + PRIMARY_TABS.length) % PRIMARY_TABS.length;
+            setCurrentlyActiveTab(PRIMARY_TABS[prevIndex]);
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            setCurrentlyActiveTab(PRIMARY_TABS[0]);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            setCurrentlyActiveTab(PRIMARY_TABS[PRIMARY_TABS.length - 1]);
+          }
+        }}
+      >
         <button
+          id="tab-overview"
           role="tab"
+          aria-controls="panel-overview"
           aria-selected={currentlyActiveTab === "Global Overview"}
           onClick={() => setCurrentlyActiveTab("Global Overview")}
           className={`tab-btn ${currentlyActiveTab === "Global Overview" ? "active" : ""}`}
@@ -2074,7 +2073,9 @@ function Dashboard() {
           Overview
         </button>
         <button
+          id="tab-workbench"
           role="tab"
+          aria-controls="panel-workbench"
           aria-selected={currentlyActiveTab === "Strategic Workbench"}
           onClick={() => setCurrentlyActiveTab("Strategic Workbench")}
           className={`tab-btn ${currentlyActiveTab === "Strategic Workbench" ? "active" : ""}`}
@@ -2082,7 +2083,9 @@ function Dashboard() {
           Workbench
         </button>
         <button
+          id="tab-explorer"
           role="tab"
+          aria-controls="panel-explorer"
           aria-selected={currentlyActiveTab === "Data Explorer"}
           onClick={() => setCurrentlyActiveTab("Data Explorer")}
           className={`tab-btn ${currentlyActiveTab === "Data Explorer" ? "active" : ""}`}
@@ -2090,7 +2093,9 @@ function Dashboard() {
           Explorer
         </button>
         <button
+          id="tab-methodology"
           role="tab"
+          aria-controls="panel-methodology"
           aria-selected={currentlyActiveTab === "Methodology"}
           onClick={() => setCurrentlyActiveTab("Methodology")}
           className={`tab-btn ${currentlyActiveTab === "Methodology" ? "active" : ""}`}

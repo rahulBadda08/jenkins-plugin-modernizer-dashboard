@@ -50,6 +50,9 @@ export function validateMigration(raw: unknown): Migration | null {
   const changedFiles = typeof raw.changedFiles === 'number' ? raw.changedFiles : 0;
   const pluginVersion = typeof raw.pluginVersion === 'string' ? raw.pluginVersion : undefined;
   const jenkinsVersion = typeof raw.jenkinsVersion === 'string' ? raw.jenkinsVersion : undefined;
+  const jenkinsBaseline = typeof raw.jenkinsBaseline === 'string' ? raw.jenkinsBaseline : undefined;
+  const targetBaseline = typeof raw.targetBaseline === 'string' ? raw.targetBaseline : undefined;
+  const effectiveBaseline = typeof raw.effectiveBaseline === 'string' ? raw.effectiveBaseline : undefined;
   const key = typeof raw.key === 'string' ? raw.key : undefined;
 
   return {
@@ -65,6 +68,9 @@ export function validateMigration(raw: unknown): Migration | null {
     changedFiles,
     pluginVersion,
     jenkinsVersion,
+    jenkinsBaseline,
+    targetBaseline,
+    effectiveBaseline,
     timestamp,
     key,
   };
@@ -104,9 +110,13 @@ export function validatePluginData(raw: unknown): PluginData | null {
 export function validatePluginDataset(raw: unknown): PluginData[] {
   if (!Array.isArray(raw)) return [];
   const validated: PluginData[] = [];
+
   for (const item of raw) {
-    const plugin = validatePluginData(item);
-    if (plugin) validated.push(plugin);
+    const valid = validatePluginData(item);
+    if (valid) {
+      validated.push(valid);
+    }
   }
+
   return validated;
 }

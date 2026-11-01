@@ -10,6 +10,8 @@ const MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json');
 
 const TMP_OUTPUT_FILE = path.join(DATA_DIR, 'all_plugins.json.tmp');
 const TMP_MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json.tmp');
+const BACKUP_OUTPUT_FILE = path.join(DATA_DIR, 'all_plugins.json.bak');
+const BACKUP_MANIFEST_FILE = path.join(DATA_DIR, 'manifest.json.bak');
 
 const TREE_API = 'https://api.github.com/repos/jenkins-infra/metadata-plugin-modernizer/git/trees/main?recursive=1';
 const REPO_IDENTIFIER = 'jenkins-infra/metadata-plugin-modernizer';
@@ -68,18 +70,24 @@ async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
             const rateLimitReset = res.headers.get('x-ratelimit-reset');
             const retryAfter = res.headers.get('retry-after');
 
-            // Non-transient client errors: 401, 404
+            // Non-transient client errors: 401, 404 (fail immediately, no retry)
             if (status === 401 || status === 404) {
-                throw new Error(`HTTP ${status} (${res.statusText})`);
+                const err = new Error(`HTTP ${status} (${res.statusText})`);
+                err.isNonTransient = true;
+                throw err;
             }
 
             if (status === 403) {
                 const isRateLimited = rateLimitRemaining === '0';
                 if (isRateLimited) {
                     const resetTime = rateLimitReset ? new Date(parseInt(rateLimitReset, 10) * 1000).toISOString() : 'unknown';
-                    throw new Error(`GitHub API Rate limit exceeded (reset at ${resetTime})`);
+                    const err = new Error(`GitHub API Rate limit exceeded (reset at ${resetTime})`);
+                    err.isNonTransient = true;
+                    throw err;
                 }
-                throw new Error(`HTTP 403 Forbidden`);
+                const err = new Error(`HTTP 403 Forbidden`);
+                err.isNonTransient = true;
+                throw err;
             }
 
             // Transient errors: 429, 500, 502, 503, 504
@@ -88,19 +96,22 @@ async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
                 throw new Error(`HTTP ${status} (${res.statusText})`);
             }
 
-            // Calculate backoff delay
-            let backoffMs = Math.pow(2, attempt) * 1000;
+            // Exponential backoff with randomized jitter (0 - 500ms)
+            const jitterMs = Math.floor(Math.random() * 500);
+            let backoffMs = Math.pow(2, attempt) * 1000 + jitterMs;
             if (retryAfter) {
                 const parsed = parseInt(retryAfter, 10);
-                if (!isNaN(parsed)) backoffMs = parsed * 1000;
+                if (!isNaN(parsed)) backoffMs = parsed * 1000 + jitterMs;
             }
-            console.warn(`[WARN] Transient error ${status} on ${url}. Retrying in ${backoffMs}ms (attempt ${attempt + 1}/${maxRetries})...`);
+            console.warn(`[WARN] Transient error ${status} on ${url}. Retrying in ${backoffMs}ms with jitter (attempt ${attempt + 1}/${maxRetries})...`);
             await sleep(backoffMs);
         } catch (err) {
-            if (attempt === maxRetries - 1) {
+            if (err.isNonTransient || attempt === maxRetries - 1) {
                 throw err;
             }
-            const backoffMs = Math.pow(2, attempt) * 1000;
+            const jitterMs = Math.floor(Math.random() * 500);
+            const backoffMs = Math.pow(2, attempt) * 1000 + jitterMs;
+            console.warn(`[WARN] Network error fetching ${url}: ${err.message}. Retrying in ${backoffMs}ms with jitter (attempt ${attempt + 1}/${maxRetries})...`);
             await sleep(backoffMs);
         }
     }
@@ -122,6 +133,8 @@ function validatePluginReport(data, filePath) {
 async function cleanupTmpFiles() {
     await fs.unlink(TMP_OUTPUT_FILE).catch(() => {});
     await fs.unlink(TMP_MANIFEST_FILE).catch(() => {});
+    await fs.unlink(BACKUP_OUTPUT_FILE).catch(() => {});
+    await fs.unlink(BACKUP_MANIFEST_FILE).catch(() => {});
 }
 
 async function run() {
@@ -238,20 +251,41 @@ async function run() {
         invalids: invalidReports.slice(0, 50),
     };
 
-    // 7. Atomic writes: Write to .tmp files, then atomic rename
+    // 7. Atomic synchronized publication with rollback
+    let hasOutputBackup = false;
+    let hasManifestBackup = false;
+
     try {
         console.log(`Staging compiled dataset (${successfulCount} plugins)...`);
         await fs.writeFile(TMP_OUTPUT_FILE, JSON.stringify(compiledData, null, 2) + '\n', 'utf8');
         await fs.writeFile(TMP_MANIFEST_FILE, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
-        // Atomic renames
+        // Backup existing files if present
+        try {
+            await fs.copyFile(OUTPUT_FILE, BACKUP_OUTPUT_FILE);
+            hasOutputBackup = true;
+        } catch {}
+        try {
+            await fs.copyFile(MANIFEST_FILE, BACKUP_MANIFEST_FILE);
+            hasManifestBackup = true;
+        } catch {}
+
+        // Synchronously rename staged files
         await fs.rename(TMP_OUTPUT_FILE, OUTPUT_FILE);
         await fs.rename(TMP_MANIFEST_FILE, MANIFEST_FILE);
+
+        // Remove temporary backups on clean execution
+        if (hasOutputBackup) await fs.unlink(BACKUP_OUTPUT_FILE).catch(() => {});
+        if (hasManifestBackup) await fs.unlink(BACKUP_MANIFEST_FILE).catch(() => {});
+
         console.log(`Successfully published atomic dataset to ${OUTPUT_FILE}`);
         console.log(`Successfully published data manifest to ${MANIFEST_FILE}`);
     } catch (err) {
+        console.error(`Publication failed: ${err.message}. Initiating rollback to previous state...`);
+        if (hasOutputBackup) await fs.copyFile(BACKUP_OUTPUT_FILE, OUTPUT_FILE).catch(() => {});
+        if (hasManifestBackup) await fs.copyFile(BACKUP_MANIFEST_FILE, MANIFEST_FILE).catch(() => {});
         await cleanupTmpFiles();
-        throw new Error(`Failed to commit atomic files: ${err.message}`);
+        throw new Error(`Failed to commit atomic files (rolled back): ${err.message}`);
     }
 
     console.log(`Ingestion SUCCESS! Extracted ${successfulCount} validated Jenkins plugins.`);

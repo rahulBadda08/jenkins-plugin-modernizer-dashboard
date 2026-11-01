@@ -22,6 +22,7 @@ interface BarChartProperties {
   yMax?: number;
   theme?: 'dark' | 'light';
   yFormatter?: (value: number) => string;
+  tooltipMode?: 'status' | 'metric' | 'drift';
   onItemClick?: (name: string) => void;
 }
 
@@ -52,6 +53,7 @@ const BarChart: React.FC<BarChartProperties> = ({
   yMax,
   theme = 'dark',
   yFormatter,
+  tooltipMode,
   onItemClick,
 }) => {
   // ── ECOSYSTEM PERSISTENCE ENGINE ──
@@ -134,12 +136,23 @@ const BarChart: React.FC<BarChartProperties> = ({
             </div>
           ` : '';
 
-          const statusText = mainSeries.value === 1 ? '<span style="color: #10B981;">ALIGNED</span>' : '<span style="color: #EF4444;">LEGACY / MISSING</span>';
+          let statusText = '';
+          const val = mainSeries.value ?? 0;
+          if (tooltipMode === 'drift') {
+            const driftColor = val > 50 ? '#EF4444' : val > 20 ? '#F59E0B' : '#10B981';
+            statusText = `<span style="color: ${driftColor}; font-weight: 700;">${val} RELEASES BEHIND</span>`;
+          } else if (tooltipMode === 'metric' || (!benchmarkData && val > 1)) {
+            const formatted = yFormatter ? yFormatter(val) : val.toLocaleString();
+            statusText = `<span style="color: #60A5FA; font-weight: 700;">${formatted}</span>`;
+          } else {
+            statusText = val === 1 ? '<span style="color: #10B981;">ALIGNED</span>' : '<span style="color: #EF4444;">LEGACY / MISSING</span>';
+          }
+          const statusLabel = tooltipMode === 'drift' ? 'DRIFT_GAP:' : (tooltipMode === 'metric' || (!benchmarkData && val > 1)) ? 'METRIC_VALUE:' : 'PLUGIN_STATUS:';
 
           return `<div style="font-family: 'Inter', sans-serif;">
                     <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px;">${escapeHtml(mainSeries.name || '')}</div>
                     <div style="display: flex; justify-content: space-between; gap: 20px; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
-                      <span style="opacity: 0.6;">PLUGIN_STATUS:</span>
+                      <span style="opacity: 0.6;">${statusLabel}</span>
                       <span style="font-weight: 700;">${statusText}</span>
                     </div>
                     ${benchmarkHtml}
@@ -237,7 +250,7 @@ const BarChart: React.FC<BarChartProperties> = ({
         },
       ],
     };
-  }, [labels, data, benchmarkData, colors, title, rotateLabel, yMax, yFormatter, isMobile, insights, severities, theme]);
+  }, [labels, data, benchmarkData, colors, title, rotateLabel, yMax, yFormatter, isMobile, insights, severities, theme, tooltipMode]);
 
   return (
     <ReactECharts

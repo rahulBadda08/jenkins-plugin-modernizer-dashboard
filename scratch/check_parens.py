@@ -1,5 +1,8 @@
+import os
 
-with open(r"c:\Users\rahul\Documents\jenkins-plugin-modernizer-dashboard\src\Dashboard.tsx", "r", encoding="utf-8") as f:
+target_path = os.path.join(os.path.dirname(__file__), "..", "src", "Dashboard.tsx")
+
+with open(target_path, "r", encoding="utf-8") as f:
     content = f.read()
 
 stack = []

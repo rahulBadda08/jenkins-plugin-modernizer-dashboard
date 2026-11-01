@@ -310,12 +310,14 @@ export default function DataExplorer({
                     </td>
                     <td style={{ padding: '16px 20px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span 
+                        <button 
+                          type="button"
                           onClick={() => onPluginSelect(plugin.pluginName)}
-                          style={{ cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 600, fontSize: '15px' }}
+                          style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--text-primary)', fontWeight: 600, fontSize: '15px', textAlign: 'left' }}
+                          aria-label={`View detailed telemetry for ${plugin.pluginName}`}
                         >
                           {plugin.pluginName}
-                        </span>
+                        </button>
                         {roadmapList?.includes(plugin.pluginName) && (
                           <span style={{ fontSize: '10px', background: 'rgba(96, 165, 250, 0.1)', color: 'var(--accent-secondary)', padding: '2px 6px', borderRadius: '4px', fontWeight: 800 }}>ROADMAP</span>
                         )}
@@ -350,7 +352,16 @@ export default function DataExplorer({
             return (
               <div 
                 key={plugin.pluginName}
+                role="button"
+                tabIndex={0}
                 onClick={() => onPluginSelect(plugin.pluginName)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onPluginSelect(plugin.pluginName);
+                  }
+                }}
+                aria-label={`View detailed telemetry for ${plugin.pluginName}`}
                 className="animate-fade-up"
                 style={{ 
                   background: 'rgba(var(--text-primary-rgb), 0.03)', 

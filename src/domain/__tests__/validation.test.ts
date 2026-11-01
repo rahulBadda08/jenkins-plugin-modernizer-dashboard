@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  validateMigration,
   validatePluginData,
   validatePluginDataset,
   normalizeMigrationStatus,
@@ -24,6 +25,27 @@ describe('validation', () => {
     expect(normalizePRStatus('draft')).toBe('DRAFT');
     expect(normalizePRStatus('none')).toBe('UNKNOWN');
     expect(normalizePRStatus(undefined)).toBe('UNKNOWN');
+  });
+
+  it('preserves all baseline fallback fields during migration validation', () => {
+    const raw = {
+      migrationName: 'Upgrade parent POM',
+      migrationStatus: 'SUCCESS',
+      pullRequestStatus: 'OPEN',
+      pullRequestUrl: 'https://github.com/pull/2',
+      jenkinsVersion: '2.440.1',
+      jenkinsBaseline: '2.452.3',
+      targetBaseline: '2.500.0',
+      effectiveBaseline: '2.580.2',
+      timestamp: '2026-10-31T12-00-00',
+    };
+
+    const validated = validateMigration(raw);
+    expect(validated).not.toBeNull();
+    expect(validated?.jenkinsVersion).toBe('2.440.1');
+    expect(validated?.jenkinsBaseline).toBe('2.452.3');
+    expect(validated?.targetBaseline).toBe('2.500.0');
+    expect(validated?.effectiveBaseline).toBe('2.580.2');
   });
 
   it('validates and extracts structured plugin objects', () => {
@@ -69,4 +91,3 @@ describe('validation', () => {
     expect(result.map(r => r.pluginName)).toEqual(['valid-one', 'valid-two']);
   });
 });
-
