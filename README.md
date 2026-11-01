@@ -91,6 +91,14 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 | **Release Management** | ✅ **Enforced** | Semantic versioning (`v1.0.0`), annotated git tags, and automated GitHub Release publishing (`release.yml`). |
 | **Repository Governance** | ✅ **Enforced** | `.github/CODEOWNERS`, `.editorconfig`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and issue/PR templates. |
 | **Infrastructure as Code (IaC)**| ✅ **Enforced** | Complete Terraform module in `terraform/` for Amazon S3 + CloudFront OAC + Security Headers deployment. |
+| **Command Injection Defense** | ✅ **Enforced** | `isSafeShellArg()` enforces strict `/^[a-zA-Z0-9_-]+$/` allowlist with mandatory advisory headers before script generation. |
+| **Spreadsheet Sanitization** | ✅ **Enforced** | `sanitizeCsvCell()` neutralizes formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`, `|`) in CSV and Excel exports. |
+| **URL Sanitization & Defense** | ✅ **Enforced** | `isValidExternalUrl()` and `sanitizeExternalUrl()` reject non-HTTP schemes (`javascript:`, `data:`, `file:`) and embedded credentials (`user:pass@`). |
+
+### 🔒 Application Security & Input Sanitization
+- **URL Sanitization & Credential Defense**: Every external link (repository URLs, issues links, pull requests) is validated using `isValidExternalUrl()` and sanitized with `sanitizeExternalUrl()` in `src/domain/security.ts`. Embedded user credentials (`user:pass@`), non-HTTP schemes (`javascript:`, `data:`, `file:`), and malformed hosts are rejected. Unsafe links are automatically neutralized and suppressed by security policy in both the UI and export layers.
+- **Strict Shell Identifier Allowlist**: `isSafeShellArg()` validates plugin names against `/^[a-zA-Z0-9_-]+$/` before generating advisory remediation bash scripts. Input failing validation produces explicit warning comments rather than silently mutating names.
+- **Spreadsheet Formula Injection Defense**: `sanitizeCsvCell()` neutralizes execution of formulas in Excel and CSV exports by prepending a single quote to triggers (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`, `|`).
 
 ---
 

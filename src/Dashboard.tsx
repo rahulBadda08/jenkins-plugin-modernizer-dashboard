@@ -28,6 +28,7 @@ import {
 } from "./domain/baselineParser";
 import { calculateHealthScore, getPluginInsight } from "./domain/scoring";
 import { filterPlugins, computeWorkbenchMetrics } from "./domain/selectors";
+import { sanitizeExternalUrl } from "./domain/security";
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -1680,28 +1681,63 @@ function Dashboard() {
                 <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }} className="mono">GUIDED_REMEDIATION_PATHWAY</div>
               </div>
 
-              <div className="action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
-                <a href={currentlySelectedPlugin.pluginRepository} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
-                  <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_01]</div>
-                  <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Analyze Codebase</h5>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Inspect source files and technical debt in the primary repository.</p>
-                  <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>Visit GitHub Repository →</div>
-                </a>
+              {(() => {
+                const safeRepoUrl = sanitizeExternalUrl(currentlySelectedPlugin.pluginRepository);
+                const safeIssuesUrl = safeRepoUrl ? `${safeRepoUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/issues` : null;
+                const safeCompareUrl = safeRepoUrl ? `${safeRepoUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/compare` : null;
 
-                <a href={`${currentlySelectedPlugin.pluginRepository}/issues`} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
-                  <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_02]</div>
-                  <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Survey Issues</h5>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Check for existing modernization blockers or security advisories.</p>
-                  <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>View Open Issues →</div>
-                </a>
+                return (
+                  <div className="action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
+                    {safeRepoUrl ? (
+                      <a href={safeRepoUrl} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
+                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_01]</div>
+                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Analyze Codebase</h5>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Inspect source files and technical debt in the primary repository.</p>
+                        <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>Visit GitHub Repository →</div>
+                      </a>
+                    ) : (
+                      <div className="glass-card in-view" style={{ padding: '20px', opacity: 0.6 }}>
+                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_01]</div>
+                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Analyze Codebase</h5>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Repository link unavailable: protocol must be valid HTTPS without credentials.</p>
+                        <div className="mono" style={{ color: 'var(--accent-amber)', fontSize: '10px' }}>[LINK_SUPPRESSED_BY_SECURITY_POLICY]</div>
+                      </div>
+                    )}
 
-                <a href={`${currentlySelectedPlugin.pluginRepository}/compare`} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none', borderLeft: '3px solid var(--accent-neon)' }}>
-                  <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-neon)', marginBottom: '8px' }}>[STEP_03]</div>
-                  <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Initiate Surgery</h5>
-                  <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Create a modernization pull request based on terminal insights.</p>
-                  <div className="link-btn" style={{ color: 'var(--accent-neon)', fontWeight: 800, fontSize: '11px' }}>Create Modernization PR →</div>
-                </a>
-              </div>
+                    {safeIssuesUrl ? (
+                      <a href={safeIssuesUrl} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
+                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_02]</div>
+                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Survey Issues</h5>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Check for existing modernization blockers or security advisories.</p>
+                        <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>View Open Issues →</div>
+                      </a>
+                    ) : (
+                      <div className="glass-card in-view" style={{ padding: '20px', opacity: 0.6 }}>
+                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_02]</div>
+                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Survey Issues</h5>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Issues link unavailable.</p>
+                        <div className="mono" style={{ color: 'var(--accent-amber)', fontSize: '10px' }}>[LINK_SUPPRESSED_BY_SECURITY_POLICY]</div>
+                      </div>
+                    )}
+
+                    {safeCompareUrl ? (
+                      <a href={safeCompareUrl} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none', borderLeft: '3px solid var(--accent-neon)' }}>
+                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-neon)', marginBottom: '8px' }}>[STEP_03]</div>
+                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Initiate Surgery</h5>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Create a modernization pull request based on terminal insights.</p>
+                        <div className="link-btn" style={{ color: 'var(--accent-neon)', fontWeight: 800, fontSize: '11px' }}>Create Modernization PR →</div>
+                      </a>
+                    ) : (
+                      <div className="glass-card in-view" style={{ padding: '20px', opacity: 0.6, borderLeft: '3px solid var(--accent-neon)' }}>
+                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-neon)', marginBottom: '8px' }}>[STEP_03]</div>
+                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Initiate Surgery</h5>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Compare link unavailable.</p>
+                        <div className="mono" style={{ color: 'var(--accent-amber)', fontSize: '10px' }}>[LINK_SUPPRESSED_BY_SECURITY_POLICY]</div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
 
             

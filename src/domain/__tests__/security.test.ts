@@ -5,6 +5,7 @@ import {
   sanitizeShellArg,
   isSafeShellArg,
   isValidExternalUrl,
+  sanitizeExternalUrl,
   parseGitHubRepo,
   SHELL_ADVISORY_HEADER,
 } from '../security';
@@ -116,6 +117,22 @@ describe('security', () => {
       expect(isValidExternalUrl('not-a-url')).toBe(false);
       expect(isValidExternalUrl('')).toBe(false);
       expect(isValidExternalUrl(null)).toBe(false);
+    });
+  });
+
+  describe('sanitizeExternalUrl', () => {
+    it('returns trimmed URL string for valid HTTP/HTTPS URLs', () => {
+      expect(sanitizeExternalUrl('  https://github.com/jenkinsci/git-plugin  ')).toBe('https://github.com/jenkinsci/git-plugin');
+      expect(sanitizeExternalUrl('http://jenkins.io')).toBe('http://jenkins.io');
+    });
+
+    it('returns null for malicious, credential-bearing, or invalid URLs', () => {
+      expect(sanitizeExternalUrl('javascript:alert(1)')).toBeNull();
+      expect(sanitizeExternalUrl('https://admin:pass@bad.com')).toBeNull();
+      expect(sanitizeExternalUrl('file:///etc/hosts')).toBeNull();
+      expect(sanitizeExternalUrl('not-valid')).toBeNull();
+      expect(sanitizeExternalUrl(null)).toBeNull();
+      expect(sanitizeExternalUrl(undefined)).toBeNull();
     });
   });
 

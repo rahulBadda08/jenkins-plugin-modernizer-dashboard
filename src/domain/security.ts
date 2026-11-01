@@ -89,6 +89,15 @@ export function isValidExternalUrl(value: unknown): boolean {
   }
 }
 
+/**
+ * Safely sanitizes an external URL, guaranteeing that only valid HTTPS/HTTP URLs are returned.
+ * Returns null if the URL is invalid, malicious, or contains embedded credentials.
+ */
+export function sanitizeExternalUrl(value: unknown): string | null {
+  if (!isValidExternalUrl(value)) return null;
+  return String(value).trim();
+}
+
 export interface GitHubRepoRef {
   owner: string;
   repo: string;
