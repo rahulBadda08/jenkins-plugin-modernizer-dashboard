@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterPlugins } from '../selectors';
+import { filterPlugins, computeWorkbenchMetrics } from '../selectors';
 import type { EnrichedPlugin } from '../types';
 
 describe('selectors', () => {
@@ -35,6 +35,9 @@ describe('selectors', () => {
         pullRequestUrl: '',
         tags: ['BOM', 'SCM'],
         timestamp: '2025-10-01T00:00:00Z',
+        additions: 100,
+        deletions: 50,
+        jenkinsVersion: '2.580.2',
       },
       healthScore: 95,
       insight: dummyInsight,
@@ -48,8 +51,11 @@ describe('selectors', () => {
         migrationStatus: 'FAILURE',
         pullRequestStatus: 'OPEN',
         pullRequestUrl: '',
-        tags: ['SCM'],
+        tags: ['SCM', 'Infra'],
         timestamp: '2025-09-01T00:00:00Z',
+        additions: 200,
+        deletions: 80,
+        jenkinsVersion: '2.440.2', // Outdated (< 2.440.3)
       },
       healthScore: 40,
       insight: {
@@ -85,5 +91,16 @@ describe('selectors', () => {
     const dangerPlugins = filterPlugins(samplePlugins, { severityFilter: 'DANGER' });
     expect(dangerPlugins).toHaveLength(1);
     expect(dangerPlugins[0].pluginName).toBe('subversion');
+  });
+
+  it('computes centralized workbench metrics with ranking and outdated counts', () => {
+    const metrics = computeWorkbenchMetrics(samplePlugins, 2);
+    expect(metrics.totalCount).toBe(2);
+    expect(metrics.filteredCount).toBe(2);
+    expect(metrics.modernizedPercentage).toBe(50);
+    // subversion has 2.440.2 which is strictly outdated (< 2.440.3)
+    expect(metrics.legacyAlignmentPercentage).toBe(50);
+    expect(metrics.legacyAlignmentNames).toEqual(['subversion']);
+    expect(metrics.roadmapList[0]).toBe('subversion'); // 280 intensity vs 150 intensity
   });
 });

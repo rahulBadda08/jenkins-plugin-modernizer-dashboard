@@ -1,7 +1,8 @@
 import type { PluginData, PluginInsight, PriorityItem, ChecklistItem } from './types';
 import { selectActiveMigration } from './migrationPolicy';
-import { calculateBaselineDrift, isVersionOutdated } from './baselineParser';
+import { calculateBaselineDrift, isVersionOutdated, getMigrationBaselineVersion } from './baselineParser';
 import { isSafeShellArg, parseGitHubRepo } from './security';
+import { classifyAllChecks, classifyBOM, classifyParentPom, classifyCI } from './checkClassification';
 
 export const SCORING_PENALTIES = {
   MIGRATION_FAILURE: 30,
@@ -13,6 +14,9 @@ export const SCORING_PENALTIES = {
   DEPRECATED_TAG: 20,
   BOM_EXPLICIT_FAILURE: 15,
   BOM_UNREPORTED_OR_UNALIGNED: 5,
+  PARENT_POM_FAILURE: 10,
+  PARENT_POM_UNREPORTED: 0,
+  SECURITY_RISK: 25,
   PR_CLOSED_UNMERGED: 15,
   PR_UNREPORTED: 5,
   BASELINE_OUTDATED: 20,
@@ -21,27 +25,29 @@ export const SCORING_PENALTIES = {
 
 export const MIN_HEALTH_SCORE = 5;
 export const MAX_HEALTH_SCORE = 100;
+export const UNSCORED_HEALTH_SCORE = 0;
 
 export function calculateHealthScore(plugin: PluginData): number {
   const migration = selectActiveMigration(plugin.migrations);
   if (!migration) return MIN_HEALTH_SCORE;
 
   let score = MAX_HEALTH_SCORE;
-  const status = migration.migrationStatus.toLowerCase();
-  const prStatus = migration.pullRequestStatus.toLowerCase();
+  const status = (migration.migrationStatus || '').toLowerCase();
+  const prStatus = (migration.pullRequestStatus || '').toLowerCase();
   const checkRuns = migration.checkRuns || {};
   const summary = (migration.checkRunsSummary || '').toLowerCase();
 
   // 1. Migration Execution Outcome
-  if (status === 'failure') score -= SCORING_PENALTIES.MIGRATION_FAILURE;
+  if (status === 'failure' || status === 'fail') score -= SCORING_PENALTIES.MIGRATION_FAILURE;
   else if (status === 'aborted') score -= SCORING_PENALTIES.MIGRATION_ABORTED;
   else if (status === 'pending' || status === 'running') score -= SCORING_PENALTIES.MIGRATION_PENDING_RUNNING;
   else if (status === 'unknown') score -= SCORING_PENALTIES.MIGRATION_UNKNOWN;
 
-  // 2. Automated CI Validation (Distinguish explicit failure from unrecorded telemetry)
-  if (summary === 'failure' || summary === 'fail') {
+  // 2. Automated CI Validation (Unified check classification)
+  const ciResult = classifyCI(summary, checkRuns);
+  if (ciResult.status === 'failed') {
     score -= SCORING_PENALTIES.CI_EXPLICIT_FAILURE;
-  } else if (!summary || summary === 'unknown') {
+  } else if (ciResult.status !== 'passed') {
     score -= SCORING_PENALTIES.CI_UNREPORTED;
   }
 
@@ -49,23 +55,30 @@ export function calculateHealthScore(plugin: PluginData): number {
   const hasDeprecated = (migration.tags || []).some(t => t.toLowerCase() === 'deprecated');
   if (hasDeprecated) score -= SCORING_PENALTIES.DEPRECATED_TAG;
 
-  const bomStatus = (checkRuns['BOM'] || checkRuns['Bom'] || '').toLowerCase();
-  if (bomStatus === 'failure' || bomStatus === 'fail') {
+  const bomResult = classifyBOM(checkRuns);
+  if (bomResult.status === 'failed') {
     score -= SCORING_PENALTIES.BOM_EXPLICIT_FAILURE;
-  } else if (bomStatus !== 'success' && bomStatus !== 'pass') {
+  } else if (bomResult.status !== 'passed') {
     score -= SCORING_PENALTIES.BOM_UNREPORTED_OR_UNALIGNED;
+  }
+
+  const parentPomResult = classifyParentPom(checkRuns);
+  if (parentPomResult.status === 'failed') {
+    score -= SCORING_PENALTIES.PARENT_POM_FAILURE;
+  } else if (parentPomResult.status !== 'passed' && parentPomResult.status !== 'unreported') {
+    score -= SCORING_PENALTIES.PARENT_POM_UNREPORTED;
   }
 
   // 4. Maintenance / PR Status
   if (prStatus === 'closed') {
     score -= SCORING_PENALTIES.PR_CLOSED_UNMERGED;
-  } else if (prStatus === 'unknown') {
+  } else if (prStatus === 'unknown' || !prStatus) {
     score -= SCORING_PENALTIES.PR_UNREPORTED;
   }
 
   // 5. Baseline Version Checks
-  const effectiveBaseline = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline;
-  const outdated = isVersionOutdated(effectiveBaseline);
+  const effectiveBaseline = getMigrationBaselineVersion(migration);
+  const outdated = isVersionOutdated(effectiveBaseline || undefined);
   if (outdated === true) {
     score -= SCORING_PENALTIES.BASELINE_OUTDATED;
   } else if (outdated === 'unknown') {
@@ -89,6 +102,7 @@ export function getRemediationCommands(checklist: ChecklistItem[], pluginName: s
   const safePluginName = pluginName.trim();
   const repoTarget = repositoryUrl ? parseGitHubRepo(repositoryUrl) : null;
   const targetRepo = repoTarget ? `${repoTarget.owner}/${repoTarget.repo}` : `jenkins-plugins/${safePluginName}`;
+
   // Strictly target confirmed failures (never trigger commands on missing/unknown telemetry)
   const fails = checklist.filter(c => c.status === 'failed');
 
@@ -127,46 +141,26 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
   };
 
   const checkRuns = migration.checkRuns || {};
-  const status = migration.migrationStatus.toLowerCase();
-  const prStatus = migration.pullRequestStatus.toLowerCase();
-  const ver = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline;
+  const status = (migration.migrationStatus || '').toLowerCase();
+  const prStatus = (migration.pullRequestStatus || '').toLowerCase();
+  const ver = getMigrationBaselineVersion(migration);
   const summary = (migration.checkRunsSummary || '').toLowerCase();
 
-  const isOutdated = isVersionOutdated(ver) === true;
+  const isOutdated = isVersionOutdated(ver || undefined) === true;
 
-  // Case-insensitive checkRuns analysis
-  const checkRunEntries = Object.entries(checkRuns).map(([k, v]) => ({
-    key: k.toLowerCase(),
-    value: (v || '').toLowerCase(),
-  }));
-  // Multi-key security and CVE checkRuns analysis
-  const securityEntries = checkRunEntries.filter(
-    e => e.key.includes('security') || e.key.includes('cve')
-  );
-  const hasSecurityCheck = securityEntries.length > 0;
-  const hasSecurityRisk = securityEntries.some(
-    e => e.value === 'failure' || e.value === 'fail' || e.value === 'error'
-  );
-  const isSecurityPassed =
-    hasSecurityCheck &&
-    !hasSecurityRisk &&
-    securityEntries.every(e => e.value === 'success' || e.value === 'pass');
+  // Centralized check run classifications
+  const { bom, parentPom, ci, security } = classifyAllChecks(checkRuns, summary);
 
-  const hasCiFailure = summary === 'failure' || summary === 'fail';
-  const hasCiSuccess = summary === 'success' || summary === 'pass';
+  const hasCiFailure = ci.status === 'failed';
+  const hasCiSuccess = ci.status === 'passed';
   const hasNoPR = prStatus === 'unknown' || prStatus === '';
   const isDraft = prStatus === 'draft';
 
-  // Checklist: 3-State Semantics (passed, failed, unknown)
-  const bomEntry = checkRunEntries.find(e => e.key.includes('bom'));
-  const bomStatus = bomEntry ? bomEntry.value : '';
-  const isBomPassed = bomStatus === 'success' || bomStatus === 'pass';
-  const isBomFailed = bomStatus === 'failure' || bomStatus === 'fail';
+  const isBomPassed = bom.status === 'passed';
+  const isBomFailed = bom.status === 'failed';
 
-  const parentPomEntry = checkRunEntries.find(e => e.key.includes('parent'));
-  const parentPomStatus = parentPomEntry ? parentPomEntry.value : '';
-  const isParentPomPassed = parentPomStatus === 'success' || parentPomStatus === 'pass';
-  const isParentPomFailed = parentPomStatus === 'failure' || parentPomStatus === 'fail';
+  const isParentPomPassed = parentPom.status === 'passed';
+  const isParentPomFailed = parentPom.status === 'failed';
 
   const checklist: ChecklistItem[] = [
     {
@@ -198,8 +192,8 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
   // Priorities with accurate status classification
   const prioritySeverity: PriorityItem = {
     label: 'Migration Status',
-    status: status === 'success' ? 'Passing' : status === 'failure' ? 'Failed' : status === 'unknown' ? 'Unknown' : 'Pending',
-    color: status === 'success' ? '#10B981' : status === 'failure' ? '#EF4444' : '#F59E0B',
+    status: status === 'success' ? 'Passing' : (status === 'failure' || status === 'fail') ? 'Failed' : status === 'unknown' ? 'Unknown' : 'Pending',
+    color: status === 'success' ? '#10B981' : (status === 'failure' || status === 'fail') ? '#EF4444' : '#F59E0B',
   };
 
   const priorityMaintenance: PriorityItem = {
@@ -210,18 +204,18 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
 
   const prioritySecurity: PriorityItem = {
     label: 'Security & Core',
-    status: hasSecurityRisk
+    status: security.hasSecurityRisk
       ? 'Vulnerabilities'
-      : isSecurityPassed
+      : security.isSecurityPassed
       ? 'Secured'
       : isOutdated
       ? 'Outdated Core'
-      : hasSecurityCheck
+      : security.entries.length > 0
       ? 'Scan Pending'
       : 'Not Reported',
-    color: hasSecurityRisk
+    color: security.hasSecurityRisk
       ? '#EF4444'
-      : isSecurityPassed
+      : security.isSecurityPassed
       ? '#10B981'
       : isOutdated
       ? '#F59E0B'
@@ -234,12 +228,12 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
   const actionSummary: string[] = [];
   const actionRecommendations: string[] = [];
 
-  if (status === 'failure' || hasSecurityRisk || hasCiFailure) {
+  if (status === 'failure' || status === 'fail' || security.hasSecurityRisk || hasCiFailure) {
     actionSeverity = 'danger';
     actionStatus = 'Requires Immediate Attention';
-    if (hasSecurityRisk) actionSummary.push('Security scan flagged compliance or vulnerability violations.');
+    if (security.hasSecurityRisk) actionSummary.push('Security scan flagged compliance or vulnerability violations.');
     if (hasCiFailure) actionSummary.push('Automated CI test execution failed regression verification.');
-    if (status === 'failure') actionSummary.push('Modernization recipe execution encountered errors.');
+    if (status === 'failure' || status === 'fail') actionSummary.push('Modernization recipe execution encountered errors.');
     actionRecommendations.push('Inspect automated build failure logs and resolve test regressions.');
   } else if (isOutdated || prStatus === 'closed' || status === 'aborted') {
     actionSeverity = 'warning';
@@ -259,7 +253,7 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
     actionRecommendations.push('Run local modernization verification using the Jenkins CLI tool.');
   }
 
-  const drift = calculateBaselineDrift(ver);
+  const drift = calculateBaselineDrift(ver || undefined);
   const commands = getRemediationCommands(checklist, plugin.pluginName, plugin.pluginRepository);
 
   return {
@@ -284,7 +278,7 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
       ci: {
         label: 'CI Integrity',
         value: hasCiSuccess,
-        display: hasCiSuccess ? 'CONFIGURED' : (summary === '' || summary === 'unknown') ? 'NOT REPORTED' : 'FAILING',
+        display: hasCiSuccess ? 'CONFIGURED' : (ci.status === 'unreported') ? 'NOT REPORTED' : 'FAILING',
       },
       pr: {
         label: 'Maintenance',

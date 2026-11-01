@@ -28,7 +28,7 @@ import {
   type BaselineBucket,
 } from "./domain/baselineParser";
 import { calculateHealthScore, getPluginInsight, SCORING_PENALTIES } from "./domain/scoring";
-import { filterPlugins } from "./domain/selectors";
+import { filterPlugins, computeWorkbenchMetrics } from "./domain/selectors";
 import { generateMasterScript } from "./application/remediation/generateMasterScript";
 
 const formatLabel = (str: string) => {
@@ -365,83 +365,14 @@ function Dashboard() {
     return Array.from(tags).sort();
   }, [pluginsWithValidMigrationData]);
 
-  // ── STRATEGIC WORKBENCH LOGIC ──
+  // ── STRATEGIC WORKBENCH LOGIC (Domain-Driven Centralized Engine) ──
   const workbenchMetrics = useMemo(() => {
-    // Stage 1: Base Filtered (Static logic for metrics)
-    const baseList = pluginsWithValidMigrationData.filter(p => {
-      const migration = p.activeMigration;
-      if (!migration) return false;
-
-      // Standard hub filters apply here
-      const matchesTopic = topicFilter === "ALL" || (migration.tags || []).includes(topicFilter);
-      const prStatus = (migration.pullRequestStatus || "UNKNOWN").toUpperCase();
-
-      let finalPrStatus = prStatus;
-      if (finalPrStatus === "DRAFT") finalPrStatus = "UNKNOWN";
-      if (finalPrStatus === "FAILURE") finalPrStatus = "FAIL";
-      const matchesPR = prFilter === "ALL" || finalPrStatus === prFilter.toUpperCase();
-
-      // Severity Match
-      let matchesSeverity = true;
-      if (severityFilter !== "ALL") {
-        const mStatus = (migration.migrationStatus || "").toLowerCase();
-        const ver = p.activeMigration.jenkinsVersion || p.activeMigration.effectiveBaseline || "0.0";
-        const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
-
-        if (severityFilter === "CRITICAL") matchesSeverity = mStatus === "fail" || mStatus === "failure";
-        else if (severityFilter === "WARNING") matchesSeverity = isOutdated || mStatus === "aborted";
-        else if (severityFilter === "OPTIMIZED") matchesSeverity = mStatus === "success";
-      }
-
-      return matchesTopic && matchesPR && matchesSeverity;
+    return computeWorkbenchMetrics(allPluginsWithInsights, allPluginsData.length, {
+      topicFilter,
+      prFilter,
+      severityFilter,
     });
-
-    const outdatedPlugins = baseList.filter(p => {
-      const ver = p.activeMigration.jenkinsVersion || p.activeMigration.effectiveBaseline || "0.0";
-      return ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
-    });
-
-    const failedPlugins = baseList.filter(p => {
-      const status = p.activeMigration.migrationStatus;
-      return status && (status.toLowerCase() === 'fail' || status.toLowerCase() === 'failure');
-    });
-
-    // Identify most frequent failure tag
-    const failureTags: Record<string, number> = {};
-    failedPlugins.forEach(p => {
-      (p.activeMigration.tags || []).forEach(t => {
-        failureTags[t] = (failureTags[t] || 0) + 1;
-      });
-    });
-    const mainRiskArea = Object.entries(failureTags).sort((a, b) => b[1] - a[1])[0]?.[0] || "General Infrastructure";
-
-    // Strategic Roadmap Ranking
-    const roadmapList = [...baseList]
-      .sort((a, b) => {
-        const migA = a.activeMigration;
-        const migB = b.activeMigration;
-        const intensityA = (migA.additions || 0) + (migA.deletions || 0);
-        const intensityB = (migB.additions || 0) + (migB.deletions || 0);
-        return intensityB - intensityA;
-      })
-      .slice(0, 20)
-      .map(p => p.pluginName);
-
-    const modernizedPlugins = baseList.filter(p => {
-      const status = p.activeMigration.migrationStatus;
-      return status && status.toLowerCase() === 'success';
-    });
-
-    return {
-      totalCount: allPluginsData.length,
-      filteredCount: baseList.length,
-      modernizedPercentage: baseList.length > 0 ? Math.round((modernizedPlugins.length / baseList.length) * 100) : 0,
-      legacyAlignmentPercentage: baseList.length > 0 ? Math.round((outdatedPlugins.length / baseList.length) * 100) : 0,
-      legacyAlignmentNames: outdatedPlugins.map(p => p.pluginName),
-      mainRiskArea: formatLabel(mainRiskArea),
-      roadmapList
-    };
-  }, [pluginsWithValidMigrationData, topicFilter, prFilter, severityFilter, allPluginsData.length]);
+  }, [allPluginsWithInsights, topicFilter, prFilter, severityFilter, allPluginsData.length]);
 
   // ── THE FILTER PIVOT ENGINE (Domain-Driven Selector Integration) ──
   const filteredEcosystem = useMemo(() => {
