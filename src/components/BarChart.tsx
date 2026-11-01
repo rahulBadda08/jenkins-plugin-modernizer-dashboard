@@ -7,7 +7,7 @@ import { escapeHtml } from "../domain/security";
  * ─────────────────────────────────────────────────────────────────────────────
  * JENKINS ECOSYSTEM BAR CHART
  * Implements high-fidelity animations, professional structured layouts, 
- * and referential stability for ecosystem data persistence.
+ * accessible screen-reader fallbacks, and referential stability.
  * ─────────────────────────────────────────────────────────────────────────────
  */
 interface BarChartProperties {
@@ -98,126 +98,84 @@ const BarChart: React.FC<BarChartProperties> = ({
           fontSize: isMobile ? 12 : 14, 
           fontWeight: 700, 
           color: theme === 'dark' ? "#F3F4F6" : "#0f172a", 
-          fontFamily: 'Outfit, sans-serif' 
-        },
+          letterSpacing: '-0.3px'
+        }
       },
-      /* ── BEYOND DECORATION: COMPARATIVE ENGINE ── */
-      legend: benchmarkData ? {
-        show: true,
-        bottom: isMobile ? '35%' : '24%',
-        textStyle: { color: theme === 'dark' ? '#94a3b8' : '#475569', fontSize: 10 },
-        data: ['Current Plugin', 'Ecosystem Standard']
-      } : undefined,
-      animationEasing: 'cubicOut',
-      animationDuration: 1200,
-      animationDurationUpdate: 800,
-      animationDelay: (idx: number) => idx * 25,
       tooltip: {
-        trigger: 'axis',
-        backgroundColor: theme === 'dark' ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
-        borderColor: theme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
-        textStyle: { color: theme === 'dark' ? '#fff' : '#0f172a', fontFamily: 'Inter, sans-serif', fontSize: 13 },
-        borderRadius: 12,
-        padding: 16,
-        backdropFilter: 'blur(12px)',
+        trigger: "axis",
+        axisPointer: { type: "shadow" },
+        backgroundColor: theme === 'dark' ? "rgba(17, 24, 39, 0.95)" : "rgba(255, 255, 255, 0.95)",
+        borderColor: theme === 'dark' ? "#374151" : "#E5E7EB",
+        borderRadius: 8,
+        textStyle: { color: theme === 'dark' ? "#F3F4F6" : "#1F2937", fontSize: 12 },
         formatter: (params: unknown) => {
-          const list = Array.isArray(params) ? (params as BarChartTooltipItem[]) : [];
-          const mainSeries = list.find((p) => p.seriesName === 'Current Plugin') || list[0] || {};
-          const benchSeries = list.find((p) => p.seriesName === 'Ecosystem Standard');
-          
-          const dataIndex = mainSeries.dataIndex ?? 0;
-          const insightText = insights?.[dataIndex];
-          const insightHtml = insightText ? `<div style="margin-top: 10px; font-size: 11px; opacity: 0.7; border-top: 1px solid ${theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}; padding-top: 10px; white-space: normal; line-height: 1.5; max-width: 240px;">${escapeHtml(insightText)}</div>` : '';
-          
-          const benchmarkHtml = benchSeries && typeof benchSeries.value === 'number' ? `
-            <div style="display: flex; justify-content: space-between; gap: 20px; margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
-              <span style="opacity: 0.6;">ECOSYSTEM_STANDARD:</span>
-              <span style="color: ${theme === 'dark' ? '#94a3b8' : '#475569'};">${escapeHtml((benchSeries.value * 100).toFixed(0))}% SUCCESS RATE</span>
-            </div>
-          ` : '';
+          const items = params as BarChartTooltipItem[];
+          if (!items || !items.length) return "";
+          const target = items.find(i => i.seriesName === "Current Plugin") || items[0];
+          const rawName = target.name || "";
+          const val = target.value ?? 0;
+          const displayVal = yFormatter ? yFormatter(val) : val;
+          const idx = target.dataIndex ?? -1;
+          const insight = insights?.[idx];
 
-          let statusText = '';
-          const val = mainSeries.value ?? 0;
-          if (tooltipMode === 'drift') {
-            const driftColor = val > 50 ? '#EF4444' : val > 20 ? '#F59E0B' : '#10B981';
-            statusText = `<span style="color: ${driftColor}; font-weight: 700;">${val} RELEASES BEHIND</span>`;
-          } else if (tooltipMode === 'metric' || (!benchmarkData && val > 1)) {
-            const formatted = yFormatter ? yFormatter(val) : val.toLocaleString();
-            statusText = `<span style="color: #60A5FA; font-weight: 700;">${formatted}</span>`;
+          let html = `<div style="font-weight: 700; margin-bottom: 4px; font-size: 13px;">${escapeHtml(rawName)}</div>`;
+          
+          if (tooltipMode === 'status') {
+            const statusColor = val >= 80 ? '#10B981' : val >= 50 ? '#F59E0B' : '#EF4444';
+            html += `<div style="display:flex; align-items:center; gap: 6px; margin-bottom: 4px;">
+              <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${statusColor};"></span>
+              <span>Health Score: <strong>${escapeHtml(String(displayVal))}</strong></span>
+            </div>`;
+          } else if (tooltipMode === 'drift') {
+            html += `<div style="margin-bottom: 4px;">Baseline Drift: <strong>${escapeHtml(String(displayVal))}</strong> minor releases</div>`;
           } else {
-            statusText = val === 1 ? '<span style="color: #10B981;">ALIGNED</span>' : '<span style="color: #EF4444;">LEGACY / MISSING</span>';
+            html += `<div style="margin-bottom: 4px;">Value: <strong>${escapeHtml(String(displayVal))}</strong></div>`;
           }
-          const statusLabel = tooltipMode === 'drift' ? 'DRIFT_GAP:' : (tooltipMode === 'metric' || (!benchmarkData && val > 1)) ? 'METRIC_VALUE:' : 'PLUGIN_STATUS:';
 
-          return `<div style="font-family: 'Inter', sans-serif;">
-                    <div style="font-weight: 700; font-size: 14px; margin-bottom: 8px;">${escapeHtml(mainSeries.name || '')}</div>
-                    <div style="display: flex; justify-content: space-between; gap: 20px; font-family: 'JetBrains Mono', monospace; font-size: 10px;">
-                      <span style="opacity: 0.6;">${statusLabel}</span>
-                      <span style="font-weight: 700;">${statusText}</span>
-                    </div>
-                    ${benchmarkHtml}
-                    ${insightHtml}
-                  </div>`;
+          if (insight) {
+            html += `<div style="font-size: 11px; opacity: 0.8; max-width: 200px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 4px; margin-top: 4px;">${escapeHtml(insight)}</div>`;
+          }
+          return html;
         }
       },
       grid: {
         left: "4%",
         right: "4%",
-        bottom: isMobile ? "35%" : "22%",
-        top: "12%",
-        containLabel: true
+        bottom: rotateLabel ? (isMobile ? "25%" : "18%") : (isMobile ? "15%" : "12%"),
+        top: title ? "20%" : "12%",
+        containLabel: true,
       },
-      dataZoom: labels.length > 15 ? [
-        {
-          type: 'slider',
-          show: true,
-          startValue: 0,
-          endValue: 14, // 15 bars visible per scroll
-          zoomLock: true,
-          height: 12,
-          bottom: isMobile ? 10 : 25,
-          backgroundColor: theme === 'dark' ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
-          fillerColor: theme === 'dark' ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.1)",
-          handleSize: 0,
-          showDetail: false,
-          showDataShadow: false,
-          brushSelect: false,
-          moveOnMouseMove: true,
-        },
-        {
-          type: 'inside',
-          zoomOnMouseWheel: false,
-          moveOnMouseWheel: true
-        }
-      ] : undefined,
       xAxis: {
         type: "category",
         data: labels,
         axisLabel: {
-          rotate: isMobile ? 45 : (rotateLabel ?? 45),
-          interval: labels.length > 20 ? 'auto' : 0,
-          color: theme === 'dark' ? "#94a3b8" : "#475569",
-          fontFamily: 'Inter, sans-serif',
-          fontSize: isMobile ? 8 : 9,
-          margin: 12,
-          formatter: (value: string) => value.length > (isMobile ? 12 : 16) ? value.substring(0, (isMobile ? 12 : 16)) + '...' : value
+          rotate: rotateLabel || (isMobile ? 45 : 0),
+          interval: 0,
+          color: theme === 'dark' ? "#9CA3AF" : "#6B7280",
+          fontSize: isMobile ? 9 : 11,
+          formatter: (value: string) => {
+            const clean = value.replace(/-/g, ' ');
+            if (isMobile && clean.length > 8) return clean.slice(0, 7) + "…";
+            return clean.length > 15 ? clean.slice(0, 13) + "…" : clean;
+          }
         },
-        axisLine: { lineStyle: { color: theme === 'dark' ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.08)" } },
+        axisLine: { lineStyle: { color: theme === 'dark' ? "#374151" : "#E5E7EB" } },
         axisTick: { show: false }
       },
       yAxis: {
         type: "value",
         max: yMax,
         axisLabel: {
-          color: theme === 'dark' ? "#94a3b8" : "#475569",
-          fontFamily: 'Inter, sans-serif',
-          fontSize: isMobile ? 9 : 10,
-          formatter: yFormatter || (yMax === 1 ? (val: number) => `${(val * 100).toFixed(0)}%` : (val: number) => val.toLocaleString()),
+          formatter: (val: number) => yFormatter ? yFormatter(val) : `${val}`,
+          color: theme === 'dark' ? "#9CA3AF" : "#6B7280",
+          fontSize: isMobile ? 10 : 11,
         },
         splitLine: {
-          lineStyle: { color: theme === 'dark' ? "rgba(255, 255, 255, 0.03)" : "rgba(0, 0, 0, 0.03)", type: 'solid' },
-        },
-        axisLine: { show: false }
+          lineStyle: {
+            color: theme === 'dark' ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)",
+            type: "dashed"
+          }
+        }
       },
       series: [
         {
@@ -226,7 +184,7 @@ const BarChart: React.FC<BarChartProperties> = ({
           type: "bar",
           barWidth: '60%',
           silent: true,
-          itemStyle: { opacity: 0.8 }
+          showBackground: false
         },
         {
           name: 'Current Plugin',
@@ -253,17 +211,47 @@ const BarChart: React.FC<BarChartProperties> = ({
   }, [labels, data, benchmarkData, colors, title, rotateLabel, yMax, yFormatter, isMobile, insights, severities, theme, tooltipMode]);
 
   return (
-    <ReactECharts
-      option={chartConfiguration}
-      style={{ height: isMobile ? 300 : 350, width: "100%" }}
-      onEvents={{
-        'click': (params: { name?: string }) => {
-          if (onItemClick && params.name) onItemClick(params.name);
-        }
-      }}
-      notMerge={false}
-      lazyUpdate={true}
-    />
+    <div
+      role="region"
+      aria-label={title ? `Chart: ${title}` : 'Bar chart visualization'}
+      tabIndex={0}
+      style={{ width: '100%', position: 'relative' }}
+    >
+      <div
+        className="sr-only"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          padding: 0,
+          margin: -1,
+          overflow: 'hidden',
+          clip: 'rect(0, 0, 0, 0)',
+          whiteSpace: 'nowrap',
+          border: 0,
+        }}
+      >
+        <h4>{title || 'Bar Chart Summary'}</h4>
+        <ul>
+          {labels.map((label, idx) => (
+            <li key={label}>
+              {label}: {yFormatter ? yFormatter(data[idx]) : data[idx]}
+            </li>
+          ))}
+        </ul>
+      </div>
+      <ReactECharts
+        option={chartConfiguration}
+        style={{ height: isMobile ? 300 : 350, width: "100%" }}
+        onEvents={{
+          'click': (params: { name?: string }) => {
+            if (onItemClick && params.name) onItemClick(params.name);
+          }
+        }}
+        notMerge={false}
+        lazyUpdate={true}
+      />
+    </div>
   );
 };
 
