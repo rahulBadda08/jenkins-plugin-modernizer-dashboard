@@ -162,7 +162,54 @@ function Dashboard() {
     };
   }, [allPluginsWithInsights]);
 
-  const [currentlyActiveTab, setCurrentlyActiveTab] = useState<string>("Global Overview");
+  const [currentlyActiveTab, setCurrentlyActiveTab] = useState<string>(() => {
+    if (typeof window === 'undefined') return "Global Overview";
+    const rawHash = window.location.hash.replace(/^#\/?/, "");
+    if (!rawHash || rawHash === "overview") return "Global Overview";
+    if (rawHash === "workbench") return "Strategic Workbench";
+    if (rawHash === "explorer") return "Data Explorer";
+    if (rawHash === "methodology" || rawHash === "method") return "Pipeline Methodology";
+    if (rawHash.startsWith("plugin=")) return decodeURIComponent(rawHash.slice(7));
+    if (rawHash.startsWith("plugin/")) return decodeURIComponent(rawHash.slice(7));
+    return "Global Overview";
+  });
+
+  useEffect(() => {
+    const getHashForTab = (tab: string): string => {
+      if (tab === "Global Overview") return "#overview";
+      if (tab === "Strategic Workbench") return "#workbench";
+      if (tab === "Data Explorer") return "#explorer";
+      if (tab === "Pipeline Methodology") return "#methodology";
+      return `#plugin=${encodeURIComponent(tab)}`;
+    };
+
+    const targetHash = getHashForTab(currentlyActiveTab);
+    if (window.location.hash !== targetHash) {
+      window.history.replaceState(null, "", targetHash);
+    }
+  }, [currentlyActiveTab]);
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const rawHash = window.location.hash.replace(/^#\/?/, "");
+      if (!rawHash || rawHash === "overview") {
+        setCurrentlyActiveTab("Global Overview");
+      } else if (rawHash === "workbench") {
+        setCurrentlyActiveTab("Strategic Workbench");
+      } else if (rawHash === "explorer") {
+        setCurrentlyActiveTab("Data Explorer");
+      } else if (rawHash === "methodology" || rawHash === "method") {
+        setCurrentlyActiveTab("Pipeline Methodology");
+      } else if (rawHash.startsWith("plugin=")) {
+        setCurrentlyActiveTab(decodeURIComponent(rawHash.slice(7)));
+      } else if (rawHash.startsWith("plugin/")) {
+        setCurrentlyActiveTab(decodeURIComponent(rawHash.slice(7)));
+      }
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+    return () => window.removeEventListener("hashchange", handleHashChange);
+  }, []);
 
   // ── V50: THE ORCHESTRATION QUEUE STATE ──
   const [surgeryQueue, setSurgeryQueue] = useState<string[]>([]);

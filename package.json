@@ -1,7 +1,7 @@
 {
   "name": "jenkins-plugin-modernizer-dashboard",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "homepage": "https://rahulBadda08.github.io/jenkins-plugin-modernizer-dashboard/",
   "engines": {
@@ -13,9 +13,10 @@
     "lint": "eslint .",
     "typecheck": "tsc -b",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "data:refresh": "node scripts/fetchData.mjs",
     "data:verify": "node scripts/verifyData.mjs",
-    "check": "npm run lint && npm run typecheck && npm test && npm run data:verify && npm run build",
+    "check": "npm run lint && npm run typecheck && npm run test:coverage && npm run data:verify && npm run build",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
@@ -38,6 +39,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.0",
+    "@vitest/coverage-v8": "^5.0.5",
     "autoprefixer": "^10.5.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",

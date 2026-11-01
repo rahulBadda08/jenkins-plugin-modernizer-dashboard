@@ -71,6 +71,31 @@ export const DashboardTabs: React.FC<DashboardTabsProps> = ({ activeTab, onSelec
           </button>
         );
       })}
+      {!PRIMARY_TABS.some((t) => t.name === activeTab) && (
+        <button
+          key="tab-plugin-drilldown"
+          id="tab-plugin-drilldown"
+          type="button"
+          role="tab"
+          aria-selected={true}
+          tabIndex={0}
+          onClick={() => onSelectTab(activeTab)}
+          className="tab-btn active"
+          style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
+        >
+          <span>Plugin: {activeTab}</span>
+          <span
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectTab("Global Overview");
+            }}
+            style={{ opacity: 0.7, cursor: "pointer", marginLeft: "4px" }}
+            aria-label="Close plugin view"
+          >
+            ✕
+          </span>
+        </button>
+      )}
     </div>
   );
 };
