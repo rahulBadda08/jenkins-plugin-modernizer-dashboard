@@ -2,75 +2,86 @@ pipeline {
     agent {
         docker {
             image 'node:24-alpine'
+            args '-u root:root'
         }
     }
 
     options {
-        timeout(time: 15, unit: 'MINUTES')
+        timeout(time: 25, unit: 'MINUTES')
+        timestamps()
         disableConcurrentBuilds()
-        ansiColor('xterm')
     }
 
     environment {
         CI = 'true'
+        npm_config_fund = 'false'
+        npm_config_audit = 'false'
     }
 
     stages {
-        stage('Install Dependencies') {
+        stage('Install') {
             steps {
+                sh 'node -v && npm -v'
                 sh 'npm ci'
             }
         }
 
-        stage('Supply Chain Audit') {
+        stage('Dependency Audit') {
             steps {
                 sh 'npm audit --omit=dev --audit-level=high'
             }
         }
 
-        stage('Static Quality Analysis') {
-            parallel {
-                stage('ESLint') {
-                    steps {
-                        sh 'npm run lint'
-                    }
-                }
-                stage('TypeScript Verification') {
-                    steps {
-                        sh 'npm run typecheck'
-                    }
-                }
-            }
-        }
-
-        stage('Unit Test Suite') {
+        stage('Lint') {
             steps {
-                sh 'npm test'
+                sh 'npx eslint .'
             }
         }
 
-        stage('Dataset Integrity Verification') {
+        stage('Typecheck') {
             steps {
-                sh 'npm run data:verify'
+                sh 'npx tsc -b'
             }
         }
 
-        stage('Production Compilation') {
+        stage('Unit Tests + Coverage') {
+            steps {
+                sh 'npx vitest run --coverage'
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'coverage/**', allowEmptyArchive: true
+                }
+            }
+        }
+
+        stage('Dataset Verification') {
+            steps {
+                sh 'node scripts/verifyData.mjs'
+            }
+        }
+
+        stage('Production Build') {
             steps {
                 sh 'npm run build'
+            }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'dist/**', fingerprint: true
+                }
+            }
+        }
+
+        stage('Bundle Budget') {
+            steps {
+                sh 'node scripts/checkBundleSize.mjs'
             }
         }
     }
 
     post {
-        always {
-            cleanWs()
-        }
-        success {
-            echo '✅ Jenkins Plugin Modernizer Dashboard: All stages, quality gates, and dataset verifications passed.'
-        }
         failure {
-            echo '❌ Pipeline quality gate failed. Inspect stage output for details.'
+            echo 'Pipeline failed. Check the stage logs above.'
         }
     }
 }

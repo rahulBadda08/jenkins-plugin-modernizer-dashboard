@@ -52,7 +52,7 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 │   ├── data/
 │   │   ├── all_plugins.json       # Deterministically sorted aggregated plugin dataset
 │   │   └── manifest.json          # Ingestion telemetry manifest with datasetSha256
-│   ├── domain/                    # Pure, test-covered business logic (83 Vitest tests, >75% coverage)
+│   ├── domain/                    # Pure, test-covered business logic (92 Vitest tests, >75% coverage)
 │   │   ├── types.ts               # Strict TypeScript interfaces & status union types
 │   │   ├── validation.ts          # Runtime schema validation & status normalizers
 │   │   ├── baselineParser.ts      # 3-part SemVer comparator (2.440.3 / 2.580.2)
@@ -79,7 +79,7 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 |---|---|---|
 | **CI Quality Gates** | ✅ **Enforced** | `ci.yml` and `deploy-pages.yml` running ESLint, `tsc -b`, Vitest, `verifyData.mjs`, Vite build, and `budget:check`. |
 | **Scheduled Data Pipeline** | ✅ **Enforced** | Daily midnight UTC sync (`sync-plugin-data.yml`), 95% threshold, atomic rollback, commit handoff, and step summary. |
-| **Containerization** | ✅ **Enforced** | Multi-stage `Dockerfile` (`node:24-alpine` -> `nginx:alpine` unprivileged), `nginx.conf`, `.dockerignore`, `docker-compose.yml`. |
+| **Containerization** | ✅ **Enforced** | Multi-stage `Dockerfile` (`node:24-alpine` -> `nginxinc/nginx-unprivileged:alpine`), `nginx/nginx.conf` (port 8080), `.dockerignore`, `docker-compose.yml`. |
 | **Jenkins Pipeline** | ✅ **Enforced** | Declarative `Jenkinsfile` with parallel lint/typecheck, supply chain audit, unit tests, and dataset verification. |
 | **Dependency Automation** | ✅ **Enforced** | `.github/dependabot.yml` maintaining weekly updates for `npm` packages and GitHub Actions. |
 | **Security Scanning & SAST** | ✅ **Enforced** | GitHub CodeQL (`codeql.yml`), `actions/dependency-review-action` on PRs, and immutable 40-character SHA-pinned actions. |
@@ -167,7 +167,7 @@ Individual commands:
 ```bash
 npm run lint           # ESLint static analysis
 npm run typecheck      # TypeScript compilation check (tsc -b)
-npm test               # Vitest unit test suite (84 tests)
+npm test               # Vitest unit test suite (92 tests)
 npm run test:coverage  # Vitest V8 code coverage report with enforced thresholds (>75% branches, >80% lines)
 npm run test:e2e       # Playwright E2E smoke and axe-core accessibility tests
 npm run data:verify    # Dataset SHA-256 and schema verification
@@ -192,7 +192,7 @@ docker compose ps
 ### Manual Docker Build
 ```bash
 docker build -t jenkins-modernizer-dashboard .
-docker run -p 8080:80 --rm jenkins-modernizer-dashboard
+docker run -p 8080:8080 --rm jenkins-modernizer-dashboard
 ```
 
 ---
