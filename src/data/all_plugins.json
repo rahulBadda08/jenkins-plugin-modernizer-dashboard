@@ -784,7 +784,8 @@
         "checkRunsSummary": "success",
         "defaultBranch": "main",
         "defaultBranchLatestCommitSha": "8f5e17db01212e8fb2927c400daefe401dd453c3",
-        "timestamp": "2025-06-23T14-04-22"
+        "timestamp": "2025-06-23T14-04-22",
+        "migrationStatus": "unknown"
       }
     ]
   },
@@ -4090,7 +4091,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T13-40-18.json",
         "path": "metadata-plugin-modernizer/bitbucket-filter-project-trait/modernization-metadata",
-        "timestamp": "2025-06-13T13-40-18"
+        "timestamp": "2025-06-13T13-40-18",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -4917,7 +4924,8 @@
         "checkRunsSummary": "success",
         "defaultBranch": "main",
         "defaultBranchLatestCommitSha": "efc21e0db43c77f7f32685774856bcfdac87c44d",
-        "timestamp": "2025-06-19T20-39-50"
+        "timestamp": "2025-06-19T20-39-50",
+        "migrationStatus": "unknown"
       }
     ]
   },
@@ -6943,7 +6951,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-12-37.json",
         "path": "metadata-plugin-modernizer/ca-mat-performance-benchmarking-by-broadcom/modernization-metadata",
-        "timestamp": "2025-06-13T14-12-37"
+        "timestamp": "2025-06-13T14-12-37",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -6962,7 +6976,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-15-49.json",
         "path": "metadata-plugin-modernizer/ca-service-virtualization/modernization-metadata",
-        "timestamp": "2025-06-13T14-15-49"
+        "timestamp": "2025-06-13T14-15-49",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -6981,7 +7001,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-18-12.json",
         "path": "metadata-plugin-modernizer/carbonetes-serverless-container-scanning-and-policy-compliance/modernization-metadata",
-        "timestamp": "2025-06-13T14-18-12"
+        "timestamp": "2025-06-13T14-18-12",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7006,7 +7032,11 @@
         "checkRunsSummary": "success",
         "defaultBranch": "master",
         "defaultBranchLatestCommitSha": "786c936c9571d9fca9fe854b73f2e16bc49fb2f1",
-        "timestamp": "2025-06-17T17-16-39"
+        "timestamp": "2025-06-17T17-16-39",
+        "migrationStatus": "unknown",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7337,7 +7367,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-23-46.json",
         "path": "metadata-plugin-modernizer/clearcase-ucm-plugin/modernization-metadata",
-        "timestamp": "2025-06-13T14-23-46"
+        "timestamp": "2025-06-13T14-23-46",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7356,7 +7392,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-27-06.json",
         "path": "metadata-plugin-modernizer/cloudbees-devoptics-enabler/modernization-metadata",
-        "timestamp": "2025-06-13T14-27-06"
+        "timestamp": "2025-06-13T14-27-06",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7436,7 +7478,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-29-53.json",
         "path": "metadata-plugin-modernizer/cloudbees-feature-management/modernization-metadata",
-        "timestamp": "2025-06-13T14-29-53"
+        "timestamp": "2025-06-13T14-29-53",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7584,7 +7632,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-32-51.json",
         "path": "metadata-plugin-modernizer/cloudevents/modernization-metadata",
-        "timestamp": "2025-06-13T14-32-51"
+        "timestamp": "2025-06-13T14-32-51",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7603,7 +7657,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-34-46.json",
         "path": "metadata-plugin-modernizer/cloudguard-shiftleft/modernization-metadata",
-        "timestamp": "2025-06-13T14-34-46"
+        "timestamp": "2025-06-13T14-34-46",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7676,7 +7736,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-39-36.json",
         "path": "metadata-plugin-modernizer/cmakebuilder/modernization-metadata",
-        "timestamp": "2025-06-13T14-39-36"
+        "timestamp": "2025-06-13T14-39-36",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7929,7 +7995,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-43-13.json",
         "path": "metadata-plugin-modernizer/codedx/modernization-metadata",
-        "timestamp": "2025-06-13T14-43-13"
+        "timestamp": "2025-06-13T14-43-13",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -7948,7 +8020,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-45-34.json",
         "path": "metadata-plugin-modernizer/codeql/modernization-metadata",
-        "timestamp": "2025-06-13T14-45-34"
+        "timestamp": "2025-06-13T14-45-34",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -8031,7 +8109,8 @@
         "checkRunsSummary": "success",
         "defaultBranch": "master",
         "defaultBranchLatestCommitSha": "f3e0a54b0df49d9d139001df52fed904d6182aa9",
-        "timestamp": "2025-06-17T17-53-34"
+        "timestamp": "2025-06-17T17-53-34",
+        "migrationStatus": "unknown"
       }
     ]
   },
@@ -8241,7 +8320,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-48-10.json",
         "path": "metadata-plugin-modernizer/commons-lang-api/modernization-metadata",
-        "timestamp": "2025-06-13T14-48-10"
+        "timestamp": "2025-06-13T14-48-10",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -8592,7 +8677,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-50-46.json",
         "path": "metadata-plugin-modernizer/compress-buildlog/modernization-metadata",
-        "timestamp": "2025-06-13T14-50-46"
+        "timestamp": "2025-06-13T14-50-46",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -8611,7 +8702,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-53-55.json",
         "path": "metadata-plugin-modernizer/computer-queue-plugin/modernization-metadata",
-        "timestamp": "2025-06-13T14-53-55"
+        "timestamp": "2025-06-13T14-53-55",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -8782,7 +8879,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-56-16.json",
         "path": "metadata-plugin-modernizer/compuware-topaz-for-enterprise-data/modernization-metadata",
-        "timestamp": "2025-06-13T14-56-16"
+        "timestamp": "2025-06-13T14-56-16",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9231,7 +9334,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T14-59-11.json",
         "path": "metadata-plugin-modernizer/config-driven-pipeline/modernization-metadata",
-        "timestamp": "2025-06-13T14-59-11"
+        "timestamp": "2025-06-13T14-59-11",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9250,7 +9359,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-01-44.json",
         "path": "metadata-plugin-modernizer/configuration-as-code-secret-ssm/modernization-metadata",
-        "timestamp": "2025-06-13T15-01-44"
+        "timestamp": "2025-06-13T15-01-44",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9269,7 +9384,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-05-02.json",
         "path": "metadata-plugin-modernizer/consul/modernization-metadata",
-        "timestamp": "2025-06-13T15-05-02"
+        "timestamp": "2025-06-13T15-05-02",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9288,7 +9409,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-07-43.json",
         "path": "metadata-plugin-modernizer/content-replace/modernization-metadata",
-        "timestamp": "2025-06-13T15-07-43"
+        "timestamp": "2025-06-13T15-07-43",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9409,7 +9536,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-11-24.json",
         "path": "metadata-plugin-modernizer/conventional-commits/modernization-metadata",
-        "timestamp": "2025-06-13T15-11-24"
+        "timestamp": "2025-06-13T15-11-24",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9428,7 +9561,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-14-31.json",
         "path": "metadata-plugin-modernizer/convert-to-pipeline/modernization-metadata",
-        "timestamp": "2025-06-13T15-14-31"
+        "timestamp": "2025-06-13T15-14-31",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9702,7 +9841,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-18-14.json",
         "path": "metadata-plugin-modernizer/cortex-metrics/modernization-metadata",
-        "timestamp": "2025-06-13T15-18-14"
+        "timestamp": "2025-06-13T15-18-14",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -9721,7 +9866,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-22-24.json",
         "path": "metadata-plugin-modernizer/countjobs-viewstabbar/modernization-metadata",
-        "timestamp": "2025-06-13T15-22-24"
+        "timestamp": "2025-06-13T15-22-24",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -10446,7 +10597,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-26-52.json",
         "path": "metadata-plugin-modernizer/crx-content-package-deployer/modernization-metadata",
-        "timestamp": "2025-06-13T15-26-52"
+        "timestamp": "2025-06-13T15-26-52",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -10465,7 +10622,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-30-35.json",
         "path": "metadata-plugin-modernizer/cucumber-living-documentation/modernization-metadata",
-        "timestamp": "2025-06-13T15-30-35"
+        "timestamp": "2025-06-13T15-30-35",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -10642,7 +10805,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-36-55.json",
         "path": "metadata-plugin-modernizer/custom-checkbox-parameter/modernization-metadata",
-        "timestamp": "2025-06-13T15-36-55"
+        "timestamp": "2025-06-13T15-36-55",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -10763,7 +10932,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-39-34.json",
         "path": "metadata-plugin-modernizer/custom-tools-plugin/modernization-metadata",
-        "timestamp": "2025-06-13T15-39-34"
+        "timestamp": "2025-06-13T15-39-34",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -10938,7 +11113,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-43-27.json",
         "path": "metadata-plugin-modernizer/cygwin-process-killer/modernization-metadata",
-        "timestamp": "2025-06-13T15-43-27"
+        "timestamp": "2025-06-13T15-43-27",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -10957,7 +11138,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-46-40.json",
         "path": "metadata-plugin-modernizer/dagshub-branch-source/modernization-metadata",
-        "timestamp": "2025-06-13T15-46-40"
+        "timestamp": "2025-06-13T15-46-40",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -11829,7 +12016,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-50-36.json",
         "path": "metadata-plugin-modernizer/dbforge-devops-automation-for-sqlserver/modernization-metadata",
-        "timestamp": "2025-06-13T15-50-36"
+        "timestamp": "2025-06-13T15-50-36",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -11848,7 +12041,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-53-41.json",
         "path": "metadata-plugin-modernizer/depbuilder/modernization-metadata",
-        "timestamp": "2025-06-13T15-53-41"
+        "timestamp": "2025-06-13T15-53-41",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -11969,7 +12168,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-56-25.json",
         "path": "metadata-plugin-modernizer/deploy-dashboard/modernization-metadata",
-        "timestamp": "2025-06-13T15-56-25"
+        "timestamp": "2025-06-13T15-56-25",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -11988,7 +12193,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T15-58-07.json",
         "path": "metadata-plugin-modernizer/deploy-integrationserver/modernization-metadata",
-        "timestamp": "2025-06-13T15-58-07"
+        "timestamp": "2025-06-13T15-58-07",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12007,7 +12218,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-01-02.json",
         "path": "metadata-plugin-modernizer/describe-with-params/modernization-metadata",
-        "timestamp": "2025-06-13T16-01-02"
+        "timestamp": "2025-06-13T16-01-02",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12026,7 +12243,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-04-13.json",
         "path": "metadata-plugin-modernizer/description-column-plugin/modernization-metadata",
-        "timestamp": "2025-06-13T16-04-13"
+        "timestamp": "2025-06-13T16-04-13",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12045,7 +12268,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-07-00.json",
         "path": "metadata-plugin-modernizer/diagnostics/modernization-metadata",
-        "timestamp": "2025-06-13T16-07-00"
+        "timestamp": "2025-06-13T16-07-00",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12182,7 +12411,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-09-41.json",
         "path": "metadata-plugin-modernizer/digitalocean-plugin/modernization-metadata",
-        "timestamp": "2025-06-13T16-09-41"
+        "timestamp": "2025-06-13T16-09-41",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12507,7 +12742,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-13-23.json",
         "path": "metadata-plugin-modernizer/docker-build-publish/modernization-metadata",
-        "timestamp": "2025-06-13T16-13-23"
+        "timestamp": "2025-06-13T16-13-23",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12577,7 +12818,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-16-54.json",
         "path": "metadata-plugin-modernizer/docker-custom-build-environment/modernization-metadata",
-        "timestamp": "2025-06-13T16-16-54"
+        "timestamp": "2025-06-13T16-16-54",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -12647,7 +12894,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-13T16-20-22.json",
         "path": "metadata-plugin-modernizer/docker-slaves/modernization-metadata",
-        "timestamp": "2025-06-13T16-20-22"
+        "timestamp": "2025-06-13T16-20-22",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },
@@ -31199,7 +31452,8 @@
         "changedFiles": 0,
         "key": "2025-06-17T18-29-24.json",
         "path": "metadata-plugin-modernizer\\lucene-search\\modernization-metadata",
-        "timestamp": "2025-06-17T18-29-24"
+        "timestamp": "2025-06-17T18-29-24",
+        "migrationStatus": "unknown"
       }
     ]
   },
@@ -38504,7 +38758,8 @@
         "checkRunsSummary": "success",
         "defaultBranch": "master",
         "defaultBranchLatestCommitSha": "a47bacad965e6b0a539082a5a643b55b2654776e",
-        "timestamp": "2025-06-24T07-19-20"
+        "timestamp": "2025-06-24T07-19-20",
+        "migrationStatus": "unknown"
       }
     ]
   },
@@ -45363,7 +45618,8 @@
         "checkRunsSummary": "success",
         "defaultBranch": "main",
         "defaultBranchLatestCommitSha": "f86208fd1e44320822f006ed82e1ac5d53e5c605",
-        "timestamp": "2025-06-18T20-02-14"
+        "timestamp": "2025-06-18T20-02-14",
+        "migrationStatus": "unknown"
       }
     ]
   },
@@ -46109,7 +46365,11 @@
         "checkRunsSummary": "success",
         "defaultBranch": "master",
         "defaultBranchLatestCommitSha": "757fa1cb35d95b3e26811885e8d387c5879bf6a7",
-        "timestamp": "2025-06-12T12-50-21"
+        "timestamp": "2025-06-12T12-50-21",
+        "migrationStatus": "unknown",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       },
       {
         "pluginVersion": "1.1.21",
@@ -46122,7 +46382,13 @@
         "migrationId": "io.jenkins.tools.pluginmodernizer.UpgradeNextMajorParentVersion",
         "key": "2025-06-11T18-28-49.json",
         "path": "metadata-plugin-modernizer\\tuleap-oauth\\modernization-metadata",
-        "timestamp": "2025-06-11T18-28-49"
+        "timestamp": "2025-06-11T18-28-49",
+        "migrationStatus": "unknown",
+        "pullRequestStatus": "",
+        "pullRequestUrl": "",
+        "additions": 0,
+        "deletions": 0,
+        "changedFiles": 0
       }
     ]
   },

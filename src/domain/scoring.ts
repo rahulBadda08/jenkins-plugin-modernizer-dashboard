@@ -1,7 +1,7 @@
 import type { PluginData, PluginInsight, PriorityItem, ChecklistItem } from './types';
 import { selectActiveMigration } from './migrationPolicy';
 import { calculateBaselineDrift, isVersionOutdated } from './baselineParser';
-import { sanitizeShellArg } from './security';
+import { isSafeShellArg } from './security';
 
 export const SCORING_PENALTIES = {
   MIGRATION_FAILURE: 30,
@@ -76,8 +76,17 @@ export function calculateHealthScore(plugin: PluginData): number {
 }
 
 export function getRemediationCommands(checklist: ChecklistItem[], pluginName: string): string[] {
+  // If pluginName contains unsafe characters, refuse command generation to prevent executing mutated/unintended targets
+  if (!isSafeShellArg(pluginName)) {
+    return [
+      '# [SECURITY ADVISORY] Refusing to generate remediation commands.',
+      '# An invalid or unsafe plugin identifier was supplied (must match ^[a-zA-Z0-9._-]+$).',
+      '# Maintainers must verify the plugin repository manually before running CLI actions.',
+    ];
+  }
+
   const commands: string[] = [];
-  const safePluginName = sanitizeShellArg(pluginName, 'plugin');
+  const safePluginName = pluginName.trim();
   // Strictly target confirmed failures (never trigger commands on missing/unknown telemetry)
   const fails = checklist.filter(c => c.status === 'failed');
 
@@ -128,10 +137,18 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
     key: k.toLowerCase(),
     value: (v || '').toLowerCase(),
   }));
-  const secEntry = checkRunEntries.find(e => e.key.includes('security'));
-  const hasSecurityCheck = !!secEntry;
-  const hasSecurityRisk = hasSecurityCheck && (secEntry.value === 'failure' || secEntry.value === 'fail');
-  const isSecurityPassed = hasSecurityCheck && (secEntry.value === 'success' || secEntry.value === 'pass');
+  // Multi-key security and CVE checkRuns analysis
+  const securityEntries = checkRunEntries.filter(
+    e => e.key.includes('security') || e.key.includes('cve')
+  );
+  const hasSecurityCheck = securityEntries.length > 0;
+  const hasSecurityRisk = securityEntries.some(
+    e => e.value === 'failure' || e.value === 'fail' || e.value === 'error'
+  );
+  const isSecurityPassed =
+    hasSecurityCheck &&
+    !hasSecurityRisk &&
+    securityEntries.every(e => e.value === 'success' || e.value === 'pass');
 
   const hasCiFailure = summary === 'failure' || summary === 'fail';
   const hasCiSuccess = summary === 'success' || summary === 'pass';
@@ -191,8 +208,22 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
 
   const prioritySecurity: PriorityItem = {
     label: 'Security & Core',
-    status: hasSecurityRisk ? 'Vulnerabilities' : isSecurityPassed ? 'Secured' : isOutdated ? 'Outdated Core' : 'Not Reported',
-    color: hasSecurityRisk ? '#EF4444' : isSecurityPassed ? '#10B981' : isOutdated ? '#F59E0B' : '#94A3B8',
+    status: hasSecurityRisk
+      ? 'Vulnerabilities'
+      : isSecurityPassed
+      ? 'Secured'
+      : isOutdated
+      ? 'Outdated Core'
+      : hasSecurityCheck
+      ? 'Scan Pending'
+      : 'Not Reported',
+    color: hasSecurityRisk
+      ? '#EF4444'
+      : isSecurityPassed
+      ? '#10B981'
+      : isOutdated
+      ? '#F59E0B'
+      : '#94A3B8',
   };
 
   // Action Insight

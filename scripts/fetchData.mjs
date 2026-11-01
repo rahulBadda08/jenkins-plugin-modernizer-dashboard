@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -20,7 +21,7 @@ const BATCH_SIZE = 30;
 const MIN_SUCCESS_RATIO = 0.95; // 95% threshold to guard against partial data publishing
 const MAX_RETRIES = 3;
 
-function getAuthHeaders() {
+export function getAuthHeaders() {
     const headers = {
         'User-Agent': USER_AGENT,
         'Accept': 'application/vnd.github.v3+json',
@@ -32,7 +33,7 @@ function getAuthHeaders() {
     return headers;
 }
 
-function getRawHeaders() {
+export function getRawHeaders() {
     const headers = {
         'User-Agent': USER_AGENT,
         'Accept': 'application/json',
@@ -56,11 +57,14 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
+export async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES, options = {}) {
+    const { allowAuthFallback = true, onAuthFallback } = options;
+    let currentHeaders = { ...headers };
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            const res = await fetch(url, { headers });
-            
+            const res = await fetch(url, { headers: currentHeaders });
+
             if (res.ok) {
                 return await res.json();
             }
@@ -70,13 +74,33 @@ async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
             const rateLimitReset = res.headers.get('x-ratelimit-reset');
             const retryAfter = res.headers.get('retry-after');
 
-            // Non-transient client errors: 401, 404 (fail immediately, no retry)
-            if (status === 401 || status === 404) {
-                const err = new Error(`HTTP ${status} (${res.statusText})`);
+            // Handle 401 Unauthorized
+            if (status === 401) {
+                if (currentHeaders.Authorization && allowAuthFallback) {
+                    delete currentHeaders.Authorization;
+                    delete currentHeaders.authorization;
+                    if (typeof onAuthFallback === 'function') {
+                        onAuthFallback();
+                    }
+                    // Attempt immediate unauthenticated retry for public repository assets
+                    const unauthRes = await fetch(url, { headers: currentHeaders });
+                    if (unauthRes.ok) {
+                        return await unauthRes.json();
+                    }
+                }
+                const err = new Error('HTTP 401 Unauthorized (Invalid or expired GitHub credentials; token contents suppressed)');
                 err.isNonTransient = true;
                 throw err;
             }
 
+            // Handle 404 Not Found
+            if (status === 404) {
+                const err = new Error(`HTTP 404 Not Found (Remote resource does not exist at ${url})`);
+                err.isNonTransient = true;
+                throw err;
+            }
+
+            // Handle 403 Forbidden / Rate limit
             if (status === 403) {
                 const isRateLimited = rateLimitRemaining === '0';
                 if (isRateLimited) {
@@ -85,7 +109,18 @@ async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
                     err.isNonTransient = true;
                     throw err;
                 }
-                const err = new Error(`HTTP 403 Forbidden`);
+                if (currentHeaders.Authorization && allowAuthFallback) {
+                    delete currentHeaders.Authorization;
+                    delete currentHeaders.authorization;
+                    if (typeof onAuthFallback === 'function') {
+                        onAuthFallback();
+                    }
+                    const unauthRes = await fetch(url, { headers: currentHeaders });
+                    if (unauthRes.ok) {
+                        return await unauthRes.json();
+                    }
+                }
+                const err = new Error('HTTP 403 Forbidden (Access denied or insufficient scope)');
                 err.isNonTransient = true;
                 throw err;
             }
@@ -93,7 +128,7 @@ async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
             // Transient errors: 429, 500, 502, 503, 504
             const isTransient = status === 429 || (status >= 500 && status < 600);
             if (!isTransient || attempt === maxRetries - 1) {
-                throw new Error(`HTTP ${status} (${res.statusText})`);
+                throw new Error(`HTTP ${status} (${res.statusText || 'Server Error'})`);
             }
 
             // Exponential backoff with randomized jitter (0 - 500ms)
@@ -117,17 +152,137 @@ async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES) {
     }
 }
 
-function validatePluginReport(data, filePath) {
-    if (!data || typeof data !== 'object') {
+export function normalizeMigrationStatus(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) return 'unknown';
+    const lower = raw.trim().toLowerCase();
+    if (lower === 'success' || lower === 'pass') return 'success';
+    if (lower === 'failure' || lower === 'fail') return 'fail';
+    if (lower === 'pending') return 'pending';
+    if (lower === 'running') return 'running';
+    if (lower === 'aborted') return 'aborted';
+    return 'unknown';
+}
+
+export function normalizePRStatus(raw) {
+    if (typeof raw !== 'string' || !raw.trim()) return '';
+    const lower = raw.trim().toLowerCase();
+    if (['merged', 'open', 'closed', 'draft'].includes(lower)) return lower;
+    return '';
+}
+
+export function validateMigrationRecord(migration, index = 0) {
+    if (!migration || typeof migration !== 'object' || Array.isArray(migration)) {
+        return { valid: false, reason: `Migration at index ${index} is not an object` };
+    }
+
+    const migrationName = typeof migration.migrationName === 'string' && migration.migrationName.trim()
+        ? migration.migrationName.trim()
+        : 'Unknown Migration';
+
+    const migrationStatus = normalizeMigrationStatus(migration.migrationStatus);
+    const pullRequestStatus = normalizePRStatus(migration.pullRequestStatus);
+
+    const additions = Number.isFinite(migration.additions)
+        ? Math.max(0, Math.floor(migration.additions))
+        : 0;
+    const deletions = Number.isFinite(migration.deletions)
+        ? Math.max(0, Math.floor(migration.deletions))
+        : 0;
+    const changedFiles = Number.isFinite(migration.changedFiles)
+        ? Math.max(0, Math.floor(migration.changedFiles))
+        : 0;
+
+    const tags = Array.isArray(migration.tags)
+        ? migration.tags.filter(t => typeof t === 'string' && t.trim().length > 0)
+        : [];
+
+    let pullRequestUrl = '';
+    if (typeof migration.pullRequestUrl === 'string') {
+        const trimmedUrl = migration.pullRequestUrl.trim();
+        if (trimmedUrl) {
+            if (!/^https?:\/\//i.test(trimmedUrl)) {
+                return { valid: false, reason: `Migration at index ${index} has invalid PR URL: "${trimmedUrl}"` };
+            }
+            pullRequestUrl = trimmedUrl;
+        }
+    }
+
+    const timestamp = typeof migration.timestamp === 'string' ? migration.timestamp.trim() : '';
+
+    let checkRuns = undefined;
+    if (migration.checkRuns && typeof migration.checkRuns === 'object' && !Array.isArray(migration.checkRuns)) {
+        checkRuns = {};
+        for (const [k, v] of Object.entries(migration.checkRuns)) {
+            checkRuns[k] = typeof v === 'string' ? v : null;
+        }
+    }
+
+    const cleaned = {
+        ...migration,
+        migrationName,
+        migrationStatus,
+        pullRequestStatus,
+        pullRequestUrl,
+        additions,
+        deletions,
+        changedFiles,
+        tags,
+        timestamp,
+    };
+
+    if (checkRuns !== undefined) {
+        cleaned.checkRuns = checkRuns;
+    }
+
+    return { valid: true, migration: cleaned };
+}
+
+export function validatePluginReport(data, filePath, seenPluginNames = new Set()) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
         return { valid: false, reason: 'Report is not an object' };
     }
-    if (!data.pluginName || typeof data.pluginName !== 'string') {
+    if (typeof data.pluginName !== 'string' || !data.pluginName.trim()) {
         return { valid: false, reason: 'Missing or invalid pluginName' };
+    }
+    const pluginName = data.pluginName.trim();
+    if (seenPluginNames.has(pluginName)) {
+        return { valid: false, reason: `Duplicate pluginName detected: "${pluginName}"` };
     }
     if (!Array.isArray(data.migrations)) {
         return { valid: false, reason: 'Missing or non-array migrations' };
     }
-    return { valid: true };
+
+    let invalidMigrationsCount = 0;
+    const cleanedMigrations = [];
+
+    for (let i = 0; i < data.migrations.length; i++) {
+        const mRes = validateMigrationRecord(data.migrations[i], i);
+        if (mRes.valid) {
+            cleanedMigrations.push(mRes.migration);
+        } else {
+            invalidMigrationsCount++;
+        }
+    }
+
+    seenPluginNames.add(pluginName);
+
+    const cleanedPlugin = {
+        ...data,
+        pluginName,
+        pluginRepository: typeof data.pluginRepository === 'string' ? data.pluginRepository.trim() : '',
+        migrations: cleanedMigrations,
+    };
+
+    return {
+        valid: true,
+        plugin: cleanedPlugin,
+        invalidMigrationsCount,
+        totalMigrationsCount: data.migrations.length,
+    };
+}
+
+export function computeDatasetHash(content) {
+    return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
 async function cleanupTmpFiles() {
@@ -137,7 +292,7 @@ async function cleanupTmpFiles() {
     await fs.unlink(BACKUP_MANIFEST_FILE).catch(() => {});
 }
 
-async function run() {
+export async function run() {
     console.log('Starting Jenkins Plugin Ecosystem Data Ingestion...');
     await ensureDir(DATA_DIR);
 
@@ -146,7 +301,12 @@ async function run() {
     const treeHeaders = getAuthHeaders();
     let treeData;
     try {
-        treeData = await fetchWithRetry(TREE_API, treeHeaders);
+        treeData = await fetchWithRetry(TREE_API, treeHeaders, MAX_RETRIES, {
+            allowAuthFallback: true,
+            onAuthFallback: () => {
+                console.warn('[WARN] GitHub API rejected provided token. Falling back to unauthenticated public access for repository tree.');
+            }
+        });
     } catch (err) {
         throw new Error(`Failed to fetch tree from ${TREE_API}: ${err.message}`);
     }
@@ -173,7 +333,10 @@ async function run() {
     const compiledData = [];
     const failedPaths = [];
     const invalidReports = [];
+    const seenPluginNames = new Set();
+    let totalInvalidMigrations = 0;
     let completed = 0;
+    let authDropped = false;
 
     // 3. Batch fetch raw JSON using raw.githubusercontent
     console.log(`Downloading raw JSON data in batches of ${BATCH_SIZE}...`);
@@ -185,13 +348,17 @@ async function run() {
             batchPaths.map(async (filePath) => {
                 const rawUrl = `https://raw.githubusercontent.com/${REPO_IDENTIFIER}/main/${filePath}`;
                 try {
-                    const data = await fetchWithRetry(rawUrl, rawHeaders);
-                    const validation = validatePluginReport(data, filePath);
-                    if (validation.valid) {
-                        return { status: 'success', data };
-                    } else {
-                        return { status: 'invalid', filePath, reason: validation.reason };
-                    }
+                    const currentHeaders = authDropped ? { ...rawHeaders, Authorization: undefined } : rawHeaders;
+                    const data = await fetchWithRetry(rawUrl, currentHeaders, MAX_RETRIES, {
+                        allowAuthFallback: true,
+                        onAuthFallback: () => {
+                            if (!authDropped) {
+                                authDropped = true;
+                                console.warn('\n[WARN] Raw downloads rejected credentials (HTTP 401/403). Falling back to unauthenticated public access.');
+                            }
+                        }
+                    });
+                    return { status: 'fetched', data, filePath };
                 } catch (err) {
                     return { status: 'failed', filePath, error: err.message };
                 }
@@ -199,17 +366,21 @@ async function run() {
         );
 
         for (const res of batchResults) {
-            if (res.status === 'success') {
-                compiledData.push(res.data);
-            } else if (res.status === 'invalid') {
-                invalidReports.push({ path: res.filePath, reason: res.reason });
+            if (res.status === 'fetched') {
+                const validation = validatePluginReport(res.data, res.filePath, seenPluginNames);
+                if (validation.valid) {
+                    compiledData.push(validation.plugin);
+                    totalInvalidMigrations += validation.invalidMigrationsCount;
+                } else {
+                    invalidReports.push({ path: res.filePath, reason: validation.reason });
+                }
             } else if (res.status === 'failed') {
                 failedPaths.push({ path: res.filePath, error: res.error });
             }
         }
 
         completed += batchPaths.length;
-        process.stdout.write(`\r Progress: ${completed}/${discoveredCount} remote files downloaded...`);
+        process.stdout.write(`\r Progress: ${completed}/${discoveredCount} remote files processed...`);
     }
 
     console.log('\nData download complete!');
@@ -223,11 +394,12 @@ async function run() {
     const successRatio = discoveredCount > 0 ? successfulCount / discoveredCount : 0;
 
     console.log(`\n── Ingestion Telemetry Summary ──`);
-    console.log(`Discovered:  ${discoveredCount}`);
-    console.log(`Successful:  ${successfulCount}`);
-    console.log(`Failed:      ${failedCount}`);
-    console.log(`Invalid:     ${invalidCount}`);
-    console.log(`Success Rate: ${(successRatio * 100).toFixed(2)}% (Target: >= ${(MIN_SUCCESS_RATIO * 100)}%)`);
+    console.log(`Discovered:          ${discoveredCount}`);
+    console.log(`Successful:          ${successfulCount}`);
+    console.log(`Failed:              ${failedCount}`);
+    console.log(`Invalid Reports:     ${invalidCount}`);
+    console.log(`Invalid Migrations:  ${totalInvalidMigrations}`);
+    console.log(`Success Rate:        ${(successRatio * 100).toFixed(2)}% (Target: >= ${(MIN_SUCCESS_RATIO * 100)}%)`);
 
     // 5. Enforce success threshold
     if (successRatio < MIN_SUCCESS_RATIO) {
@@ -237,15 +409,20 @@ async function run() {
         );
     }
 
-    // 6. Generate Data Manifest
+    // 6. Generate Data Manifest with cryptographic SHA256 checksum
+    const datasetContent = JSON.stringify(compiledData, null, 2) + '\n';
+    const datasetSha256 = computeDatasetHash(datasetContent);
+
     const manifest = {
         sourceRepository: REPO_IDENTIFIER,
         sourceTreeSha: treeSha,
+        datasetSha256,
         generatedAt: new Date().toISOString(),
         discoveredCount,
         successfulCount,
         failedCount,
         invalidCount,
+        invalidMigrationsCount: totalInvalidMigrations,
         successRatio: parseFloat(successRatio.toFixed(4)),
         failures: failedPaths.slice(0, 50),
         invalids: invalidReports.slice(0, 50),
@@ -256,8 +433,8 @@ async function run() {
     let hasManifestBackup = false;
 
     try {
-        console.log(`Staging compiled dataset (${successfulCount} plugins)...`);
-        await fs.writeFile(TMP_OUTPUT_FILE, JSON.stringify(compiledData, null, 2) + '\n', 'utf8');
+        console.log(`Staging compiled dataset (${successfulCount} plugins, sha256: ${datasetSha256.slice(0, 12)}...)...`);
+        await fs.writeFile(TMP_OUTPUT_FILE, datasetContent, 'utf8');
         await fs.writeFile(TMP_MANIFEST_FILE, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
 
         // Backup existing files if present
@@ -291,7 +468,10 @@ async function run() {
     console.log(`Ingestion SUCCESS! Extracted ${successfulCount} validated Jenkins plugins.`);
 }
 
-run().catch(err => {
-    console.error(`\n[FATAL] Data Ingestion Error:`, err.message || err);
-    process.exit(1);
-});
+const isDirectExecution = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isDirectExecution) {
+    run().catch(err => {
+        console.error(`\n[FATAL] Data Ingestion Error:`, err.message || err);
+        process.exit(1);
+    });
+}

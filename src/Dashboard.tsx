@@ -11,11 +11,12 @@ import architectureImage from "./assets/architecture_diagram.png";
 import automationStackImage from "./assets/automation_stack_blueprint.png";
 import dataAcquisitionImage from "./assets/data_acquisition_blueprint.png";
 import visualizationLayerImage from "./assets/visualization_layer_blueprint.png";
+import jenkinsLogo from "./assets/jenkins-logo.svg";
 
 // ── DOMAIN ARCHITECTURE & STRICT TYPES ──
 import type { PluginData, EnrichedPlugin } from "./domain/types";
 import { validatePluginDataset } from "./domain/validation";
-import { selectActiveMigration } from "./domain/migrationPolicy";
+import { getActiveMigration } from "./domain/migrationPolicy";
 import {
   LTS_BASELINE,
   MINIMUM_SUPPORTED_BASELINE,
@@ -28,7 +29,7 @@ import {
 } from "./domain/baselineParser";
 import { calculateHealthScore, getPluginInsight, SCORING_PENALTIES } from "./domain/scoring";
 import { filterPlugins } from "./domain/selectors";
-import { sanitizeShellArg } from "./domain/security";
+import { isSafeShellArg, escapeHtml } from "./domain/security";
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -142,7 +143,7 @@ function Dashboard() {
   // ── V45: PRE-CALCULATE ALL INSIGHTS ──
   const allPluginsWithInsights: EnrichedPlugin[] = useMemo(() => {
     return allPluginsData.map(plugin => {
-      const activeMigration = selectActiveMigration(plugin.migrations);
+      const activeMigration = getActiveMigration(plugin);
       return {
         ...plugin,
         activeMigration,
@@ -359,7 +360,7 @@ function Dashboard() {
   const uniqueTopics = useMemo(() => {
     const tags = new Set<string>();
     pluginsWithValidMigrationData.forEach(p => {
-      (p.migrations[0].tags || []).forEach(t => tags.add(t));
+      (p.activeMigration.tags || []).forEach(t => tags.add(t));
     });
     return Array.from(tags).sort();
   }, [pluginsWithValidMigrationData]);
@@ -368,7 +369,7 @@ function Dashboard() {
   const workbenchMetrics = useMemo(() => {
     // Stage 1: Base Filtered (Static logic for metrics)
     const baseList = pluginsWithValidMigrationData.filter(p => {
-      const migration = p.migrations[0];
+      const migration = p.activeMigration;
       if (!migration) return false;
 
       // Standard hub filters apply here
@@ -384,7 +385,7 @@ function Dashboard() {
       let matchesSeverity = true;
       if (severityFilter !== "ALL") {
         const mStatus = (migration.migrationStatus || "").toLowerCase();
-        const ver = p.migrations[0].jenkinsVersion || "0.0";
+        const ver = p.activeMigration.jenkinsVersion || p.activeMigration.effectiveBaseline || "0.0";
         const isOutdated = ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
 
         if (severityFilter === "CRITICAL") matchesSeverity = mStatus === "fail" || mStatus === "failure";
@@ -396,19 +397,19 @@ function Dashboard() {
     });
 
     const outdatedPlugins = baseList.filter(p => {
-      const ver = p.migrations[0].jenkinsVersion || "0.0";
+      const ver = p.activeMigration.jenkinsVersion || p.activeMigration.effectiveBaseline || "0.0";
       return ver.startsWith("1.") || (ver.startsWith("2.") && parseFloat(ver.split(".")[1]) < OUTDATED_MINOR_THRESHOLD);
     });
 
     const failedPlugins = baseList.filter(p => {
-      const status = p.migrations[0].migrationStatus;
+      const status = p.activeMigration.migrationStatus;
       return status && (status.toLowerCase() === 'fail' || status.toLowerCase() === 'failure');
     });
 
     // Identify most frequent failure tag
     const failureTags: Record<string, number> = {};
     failedPlugins.forEach(p => {
-      (p.migrations[0].tags || []).forEach(t => {
+      (p.activeMigration.tags || []).forEach(t => {
         failureTags[t] = (failureTags[t] || 0) + 1;
       });
     });
@@ -417,8 +418,8 @@ function Dashboard() {
     // Strategic Roadmap Ranking
     const roadmapList = [...baseList]
       .sort((a, b) => {
-        const migA = a.migrations[0];
-        const migB = b.migrations[0];
+        const migA = a.activeMigration;
+        const migB = b.activeMigration;
         const intensityA = (migA.additions || 0) + (migA.deletions || 0);
         const intensityB = (migB.additions || 0) + (migB.deletions || 0);
         return intensityB - intensityA;
@@ -427,7 +428,7 @@ function Dashboard() {
       .map(p => p.pluginName);
 
     const modernizedPlugins = baseList.filter(p => {
-      const status = p.migrations[0].migrationStatus;
+      const status = p.activeMigration.migrationStatus;
       return status && status.toLowerCase() === 'success';
     });
 
@@ -583,7 +584,7 @@ function Dashboard() {
   const ecosystemBenchmarks = useMemo(() => {
     const counts: Record<string, { success: number; total: number }> = {};
     allPluginsWithInsights.forEach(p => {
-      const migration = p.migrations?.[0];
+      const migration = p.activeMigration;
       if (!migration || !migration.checkRuns) return;
       Object.entries(migration.checkRuns).forEach(([k, status]) => {
         if (!counts[k]) counts[k] = { success: 0, total: 0 };
@@ -605,8 +606,7 @@ function Dashboard() {
       .map(p => {
         const driftFactor = p.insight.surgical.drift.gap;
         const failFactor = p.insight.checklist.filter(c => c.status === 'failed').length * 10;
-        const intensity = ((p.activeMigration?.additions || p.migrations[0]?.additions || 0) +
-          (p.activeMigration?.deletions || p.migrations[0]?.deletions || 0));
+        const intensity = (p.activeMigration.additions || 0) + (p.activeMigration.deletions || 0);
         const totalImpact = (driftFactor + failFactor) * (1 + intensity / 5000);
         return { ...p, impactScore: totalImpact };
       })
@@ -615,15 +615,15 @@ function Dashboard() {
   }, [allPluginsWithInsights]);
 
   const grandTotalAdditions = useMemo(() =>
-    filteredEcosystem.reduce((acc, plugin) => acc + (plugin.migrations[0].additions || 0), 0)
+    filteredEcosystem.reduce((acc, plugin) => acc + (plugin.activeMigration.additions || 0), 0)
     , [filteredEcosystem]);
 
   const grandTotalDeletions = useMemo(() =>
-    filteredEcosystem.reduce((acc, plugin) => acc + (plugin.migrations[0].deletions || 0), 0)
+    filteredEcosystem.reduce((acc, plugin) => acc + (plugin.activeMigration.deletions || 0), 0)
     , [filteredEcosystem]);
 
   const grandTotalFilesChanged = useMemo(() =>
-    filteredEcosystem.reduce((acc, plugin) => acc + (plugin.migrations[0].changedFiles || 0), 0)
+    filteredEcosystem.reduce((acc, plugin) => acc + (plugin.activeMigration.changedFiles || 0), 0)
     , [filteredEcosystem]);
 
   const baselineHealthSummary = useMemo(() => {
@@ -635,7 +635,7 @@ function Dashboard() {
     };
 
     filteredEcosystem.forEach(plugin => {
-      const migration = plugin.migrations[0];
+      const migration = plugin.activeMigration;
       const bucket = getBaselineBucket(getMigrationBaselineMinor(migration));
       bucketPlugins[bucket].push(plugin.pluginName);
     });
@@ -649,7 +649,7 @@ function Dashboard() {
 
     const driftTargets = [...filteredEcosystem]
       .map(plugin => {
-        const migration = plugin.migrations[0];
+        const migration = plugin.activeMigration;
         const baselineVersion = migration.jenkinsVersion || migration.effectiveBaseline || migration.jenkinsBaseline || migration.targetBaseline || "0.0";
         const drift = calculateBaselineDrift(baselineVersion);
         return {
@@ -672,7 +672,7 @@ function Dashboard() {
   const { topPieData, overviewLabels, overviewData, integrityLabels, integrityData, integrityInsights } = useMemo(() => {
     const globalTagCounts: Record<string, number> = {};
     filteredEcosystem.forEach(plugin => {
-      (plugin.migrations[0].tags || []).forEach(tag => {
+      (plugin.activeMigration.tags || []).forEach(tag => {
         globalTagCounts[tag] = (globalTagCounts[tag] || 0) + 1;
       });
     });
@@ -707,7 +707,7 @@ function Dashboard() {
     const scaled = [...filteredEcosystem]
       .map(plugin => ({
         name: plugin.pluginName,
-        totalMods: (plugin.migrations[0].additions || 0) + (plugin.migrations[0].deletions || 0)
+        totalMods: (plugin.activeMigration.additions || 0) + (plugin.activeMigration.deletions || 0)
       }))
       .sort((a, b) => b.totalMods - a.totalMods);
 
@@ -735,8 +735,8 @@ function Dashboard() {
   );
 
   const detailMetrics = useMemo(() => {
-    if (!currentlySelectedPlugin || !currentlySelectedPlugin.migrations.length) return null;
-    const migration = currentlySelectedPlugin.migrations[0];
+    if (!currentlySelectedPlugin) return null;
+    const migration = currentlySelectedPlugin.activeMigration;
     const checkRuns = migration.checkRuns || {};
     const checkRunKeys = Object.keys(checkRuns);
 
@@ -1071,7 +1071,15 @@ function Dashboard() {
   const renderMainContent = () => {
     if (currentlyActiveTab === "Global Overview") {
       return (
-        <div className="tab-content" key="global" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+        <div
+          id="panel-overview"
+          role="tabpanel"
+          aria-labelledby="tab-overview"
+          tabIndex={0}
+          className="tab-content"
+          key="global"
+          style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}
+        >
 
           
 
@@ -1088,7 +1096,21 @@ function Dashboard() {
               </div>
             </div>
 
-            <div ref={heroCard2Ref} className="glass-card hero-card risk-glow kinetic-card liquid-glass tier-2 in-view" onClick={activateLegacyView} style={{ cursor: 'pointer' }}>
+            <div
+              ref={heroCard2Ref}
+              role="button"
+              tabIndex={0}
+              aria-label="Inspect Legacy Core Alignment Gap"
+              className="glass-card hero-card risk-glow kinetic-card liquid-glass tier-2 in-view"
+              onClick={activateLegacyView}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  activateLegacyView();
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <div className="kinetic-text">
                 <span className="hero-label truncate-text">Modern Alignment Gap</span>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
@@ -1183,7 +1205,20 @@ function Dashboard() {
             </div>
 
             <div className="hub-grid">
-              <div ref={hubCard1Ref} className="glass-card hub-card risk clickable kinetic-card liquid-glass animate-delay-1" onClick={activateLegacyView}>
+              <div
+                ref={hubCard1Ref}
+                role="button"
+                tabIndex={0}
+                aria-label="Inspect Legacy Plugins"
+                className="glass-card hub-card risk clickable kinetic-card liquid-glass animate-delay-1"
+                onClick={activateLegacyView}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    activateLegacyView();
+                  }
+                }}
+              >
                 <div className="kinetic-text">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span className="hub-card-label">Legacy Core Alignment</span>
@@ -1205,7 +1240,20 @@ function Dashboard() {
                 </div>
               </div>
 
-              <div ref={hubCard3Ref} className="glass-card hub-card roadmap clickable kinetic-card liquid-glass animate-delay-3" onClick={activateRoadmap}>
+              <div
+                ref={hubCard3Ref}
+                role="button"
+                tabIndex={0}
+                aria-label="Activate Priority Roadmap Work Queue"
+                className="glass-card hub-card roadmap clickable kinetic-card liquid-glass animate-delay-3"
+                onClick={activateRoadmap}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    activateRoadmap();
+                  }
+                }}
+              >
                 <div className="kinetic-text">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <span className="hub-card-label">Priority Roadmap</span>
@@ -1349,7 +1397,14 @@ function Dashboard() {
 
     if (currentlyActiveTab === "Data Explorer") {
       return (
-        <div className="tab-content animate-fade-up" key="explorer-tab-container">
+        <div
+          id="panel-explorer"
+          role="tabpanel"
+          aria-labelledby="tab-explorer"
+          tabIndex={0}
+          className="tab-content animate-fade-up"
+          key="explorer-tab-container"
+        >
           <ErrorBoundary>
             <DataExplorer
               plugins={filteredEcosystem}
@@ -1367,8 +1422,8 @@ function Dashboard() {
     }
 
     // Detail View: Target Plugin Analytics
-    if (currentlySelectedPlugin && currentlySelectedPlugin.migrations.length > 0 && detailMetrics) {
-      const migrationData = currentlySelectedPlugin.migrations[0];
+    if (currentlySelectedPlugin && detailMetrics) {
+      const migrationData = currentlySelectedPlugin.activeMigration;
       return (
         <div className="tab-content" key={currentlyActiveTab}>
           <div className="reveal-node" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "40px" }}>
@@ -1691,7 +1746,14 @@ function Dashboard() {
       const paginatedQueue = filteredQueue.slice((workbenchPage - 1) * itemsPerPage, workbenchPage * itemsPerPage);
 
       return (
-        <div className="tab-content animate-fade-up" key="workbench">
+        <div
+          id="panel-workbench"
+          role="tabpanel"
+          aria-labelledby="tab-workbench"
+          tabIndex={0}
+          className="tab-content animate-fade-up"
+          key="workbench"
+        >
           <div className="tactical-board standalone reveal-node">
             <div className="board-header" style={{ marginBottom: '40px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1710,7 +1772,7 @@ function Dashboard() {
             <div className="task-grid">
               {paginatedQueue.map((pluginName) => {
                 const pData = allPluginsWithInsights.find(p => p.pluginName === pluginName);
-                const rawStatus = (pData?.migrations[0]?.migrationStatus || "UNKNOWN").toLowerCase();
+                const rawStatus = (pData?.activeMigration?.migrationStatus || "UNKNOWN").toLowerCase();
                 const displayStatus = rawStatus.replace(/_/g, ' ');
                 const priority = pData?.insight?.priorities?.severity || { color: 'transparent', status: 'Unknown' };
 
@@ -1843,7 +1905,14 @@ function Dashboard() {
       ];
 
       return (
-        <div className="tab-content animate-fade-up" key="methodology">
+        <div
+          id="panel-methodology"
+          role="tabpanel"
+          aria-labelledby="tab-methodology"
+          tabIndex={0}
+          className="tab-content animate-fade-up"
+          key="methodology"
+        >
           <div className="glass-card reveal-node" style={{ padding: '60px' }}>
             <p className="hero-label">SYSTEM_INTELLIGENCE_SPEC</p>
             <h2 className="title" style={{ marginBottom: '40px' }}>Architecture & <span className="text-accent">Methodology</span></h2>
@@ -1858,7 +1927,13 @@ function Dashboard() {
                 This project transforms Jenkins plugin modernization metadata into actionable visual insights using a build-time data processing approach.
               </p>
               <div className="arch-diagram" style={{ marginBottom: '60px' }}>
-                <img src={architectureImage} alt="Static Data Pipeline Architecture" style={{ maxWidth: '100%', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }} />
+                <img
+                  src={architectureImage}
+                  alt="Static Data Pipeline Architecture"
+                  loading="lazy"
+                  decoding="async"
+                  style={{ maxWidth: '100%', borderRadius: '24px', border: '1px solid rgba(255,255,255,0.1)' }}
+                />
               </div>
 
               <ol className="fb-timeline">
@@ -1880,10 +1955,14 @@ function Dashboard() {
                           <h3 className="fb-item-title">{item.title}</h3>
                           {item.imgSrc && (
                             <div className="fb-blueprint">
-                              <img src={item.imgSrc} alt={`${item.title} Blueprint`} />
+                              <img src={item.imgSrc} alt={`${item.title} Blueprint`} loading="lazy" decoding="async" />
                             </div>
                           )}
-                          <p className="fb-item-body" dangerouslySetInnerHTML={{ __html: item.desc.replace(/`([^`]+)`/g, '<code>$1</code>') }} />
+                          <p className="fb-item-body">
+                            {item.desc.split(/`([^`]+)`/g).map((part, idx) =>
+                              idx % 2 === 1 ? <code key={idx}>{part}</code> : part
+                            )}
+                          </p>
                         </div>
                       </li>
                     </React.Fragment>
@@ -2008,7 +2087,7 @@ function Dashboard() {
           <div className="flex-shrink-0 relative group">
             <div className="absolute inset-0 bg-white/10 blur-2xl rounded-full scale-150 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none"></div>
             <img
-              src="https://upload.wikimedia.org/wikipedia/commons/e/e9/Jenkins_logo.svg"
+              src={jenkinsLogo}
               alt="Jenkins Logo"
               className="w-24 sm:w-28 md:w-32 h-auto drop-shadow-[0_0_24px_rgba(255,255,255,0.3)] transition-transform duration-500 hover:scale-105"
             />
@@ -2042,23 +2121,32 @@ function Dashboard() {
         role="tablist" 
         aria-label="Operational Mode Switcher"
         onKeyDown={(e) => {
-          const PRIMARY_TABS = ["Global Overview", "Strategic Workbench", "Data Explorer", "Methodology"] as const;
-          const currentIndex = PRIMARY_TABS.indexOf(currentlyActiveTab as typeof PRIMARY_TABS[number]);
+          const PRIMARY_TABS = [
+            { name: "Global Overview", id: "tab-overview" },
+            { name: "Strategic Workbench", id: "tab-workbench" },
+            { name: "Data Explorer", id: "tab-explorer" },
+            { name: "Methodology", id: "tab-methodology" },
+          ];
+          const currentIndex = PRIMARY_TABS.findIndex(t => t.name === currentlyActiveTab);
           if (currentIndex === -1) return;
+          let targetIndex = -1;
           if (e.key === "ArrowRight") {
             e.preventDefault();
-            const nextIndex = (currentIndex + 1) % PRIMARY_TABS.length;
-            setCurrentlyActiveTab(PRIMARY_TABS[nextIndex]);
+            targetIndex = (currentIndex + 1) % PRIMARY_TABS.length;
           } else if (e.key === "ArrowLeft") {
             e.preventDefault();
-            const prevIndex = (currentIndex - 1 + PRIMARY_TABS.length) % PRIMARY_TABS.length;
-            setCurrentlyActiveTab(PRIMARY_TABS[prevIndex]);
+            targetIndex = (currentIndex - 1 + PRIMARY_TABS.length) % PRIMARY_TABS.length;
           } else if (e.key === "Home") {
             e.preventDefault();
-            setCurrentlyActiveTab(PRIMARY_TABS[0]);
+            targetIndex = 0;
           } else if (e.key === "End") {
             e.preventDefault();
-            setCurrentlyActiveTab(PRIMARY_TABS[PRIMARY_TABS.length - 1]);
+            targetIndex = PRIMARY_TABS.length - 1;
+          }
+          if (targetIndex !== -1) {
+            const target = PRIMARY_TABS[targetIndex];
+            setCurrentlyActiveTab(target.name);
+            document.getElementById(target.id)?.focus();
           }
         }}
       >
@@ -2067,6 +2155,7 @@ function Dashboard() {
           role="tab"
           aria-controls="panel-overview"
           aria-selected={currentlyActiveTab === "Global Overview"}
+          tabIndex={currentlyActiveTab === "Global Overview" ? 0 : -1}
           onClick={() => setCurrentlyActiveTab("Global Overview")}
           className={`tab-btn ${currentlyActiveTab === "Global Overview" ? "active" : ""}`}
         >
@@ -2077,6 +2166,7 @@ function Dashboard() {
           role="tab"
           aria-controls="panel-workbench"
           aria-selected={currentlyActiveTab === "Strategic Workbench"}
+          tabIndex={currentlyActiveTab === "Strategic Workbench" ? 0 : -1}
           onClick={() => setCurrentlyActiveTab("Strategic Workbench")}
           className={`tab-btn ${currentlyActiveTab === "Strategic Workbench" ? "active" : ""}`}
         >
@@ -2087,6 +2177,7 @@ function Dashboard() {
           role="tab"
           aria-controls="panel-explorer"
           aria-selected={currentlyActiveTab === "Data Explorer"}
+          tabIndex={currentlyActiveTab === "Data Explorer" ? 0 : -1}
           onClick={() => setCurrentlyActiveTab("Data Explorer")}
           className={`tab-btn ${currentlyActiveTab === "Data Explorer" ? "active" : ""}`}
         >
@@ -2097,6 +2188,7 @@ function Dashboard() {
           role="tab"
           aria-controls="panel-methodology"
           aria-selected={currentlyActiveTab === "Methodology"}
+          tabIndex={currentlyActiveTab === "Methodology" ? 0 : -1}
           onClick={() => setCurrentlyActiveTab("Methodology")}
           className={`tab-btn ${currentlyActiveTab === "Methodology" ? "active" : ""}`}
         >
@@ -2130,10 +2222,17 @@ function Dashboard() {
                       "#!/bin/bash",
                       `# AUTOMATED MODERNIZATION SCRIPT - GENERATED: ${new Date().toISOString()}`,
                       "# ----------------------------------------------------------------",
+                      "# ADVISORY: The following commands are automated recommendations based on",
+                      "# static metadata analysis. Maintainers must review commands and test locally",
+                      "# before executing in production environments.",
+                      "# ----------------------------------------------------------------",
                       ...surgeryQueue.map(name => {
+                        if (!isSafeShellArg(name)) {
+                          return `\n# --- Targeting: SKIPPED (Invalid or unsafe plugin identifier: "${escapeHtml(name)}") ---`;
+                        }
                         const plugin = allPluginsWithInsights.find(p => p.pluginName === name);
                         return [
-                          `\n# --- Targeting: ${sanitizeShellArg(name, 'plugin')} ---`,
+                          `\n# --- Targeting: ${name} ---`,
                           ...(plugin?.insight.surgical.commands || [])
                         ].join('\n');
                       })
@@ -2161,8 +2260,33 @@ function Dashboard() {
             </div>
             <div className="tray-item-list">
               {surgeryQueue.map(name => (
-                <div key={name} className="tray-item mono" onClick={() => handleDrillDown(name)}>
-                  {name} <span onClick={(e) => { e.stopPropagation(); toggleQueueItem(name); }} className="remove-cross">×</span>
+                <div
+                  key={name}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Inspect ${name}`}
+                  className="tray-item mono"
+                  onClick={() => handleDrillDown(name)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      handleDrillDown(name);
+                    }
+                  }}
+                >
+                  {name}{' '}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${name} from surgery queue`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleQueueItem(name);
+                    }}
+                    className="remove-cross"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'inherit', padding: 0 }}
+                  >
+                    ×
+                  </button>
                 </div>
               ))}
             </div>

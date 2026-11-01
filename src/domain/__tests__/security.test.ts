@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { escapeHtml, sanitizeCsvCell, sanitizeShellArg } from '../security';
+import {
+  escapeHtml,
+  sanitizeCsvCell,
+  sanitizeShellArg,
+  isSafeShellArg,
+  SHELL_ADVISORY_HEADER,
+} from '../security';
 
 describe('security', () => {
   describe('escapeHtml', () => {
@@ -43,17 +49,48 @@ describe('security', () => {
     });
   });
 
-  describe('sanitizeShellArg', () => {
-    it('strips shell metacharacters and command substitutions', () => {
-      expect(sanitizeShellArg('plugin; rm -rf /')).toBe('pluginrm-rf');
-      expect(sanitizeShellArg('$(whoami)')).toBe('whoami');
-      expect(sanitizeShellArg('`id`')).toBe('id');
-      expect(sanitizeShellArg('my-valid_plugin.js')).toBe('my-valid_plugin.js');
+  describe('isSafeShellArg', () => {
+    it('accepts valid plugin and repository names', () => {
+      expect(isSafeShellArg('git')).toBe(true);
+      expect(isSafeShellArg('workflow-job')).toBe(true);
+      expect(isSafeShellArg('sample_plugin.v2')).toBe(true);
+      expect(isSafeShellArg('jenkins-core-2.580')).toBe(true);
     });
 
-    it('falls back to default if string is empty or invalid', () => {
+    it('rejects command injection patterns and metacharacters', () => {
+      expect(isSafeShellArg('plugin; rm -rf /')).toBe(false);
+      expect(isSafeShellArg('$(whoami)')).toBe(false);
+      expect(isSafeShellArg('`id`')).toBe(false);
+      expect(isSafeShellArg('plugin && evil')).toBe(false);
+      expect(isSafeShellArg('plugin | sh')).toBe(false);
+      expect(isSafeShellArg('../../../etc/passwd')).toBe(false);
+      expect(isSafeShellArg('foo\nbar')).toBe(false);
+      expect(isSafeShellArg('')).toBe(false);
+      expect(isSafeShellArg(null)).toBe(false);
+      expect(isSafeShellArg(undefined)).toBe(false);
+    });
+  });
+
+  describe('sanitizeShellArg', () => {
+    it('returns valid identifiers unchanged', () => {
+      expect(sanitizeShellArg('my-valid_plugin.js')).toBe('my-valid_plugin.js');
+      expect(sanitizeShellArg('git')).toBe('git');
+    });
+
+    it('refuses to silently strip dangerous characters and returns fallback', () => {
+      // Must NOT silently mutate 'plugin; rm -rf /' into 'pluginrm-rf'
+      expect(sanitizeShellArg('plugin; rm -rf /')).toBe('unknown');
+      expect(sanitizeShellArg('$(whoami)')).toBe('unknown');
+      expect(sanitizeShellArg('`id`')).toBe('unknown');
       expect(sanitizeShellArg('$$$&&&')).toBe('unknown');
       expect(sanitizeShellArg('', 'fallback-plugin')).toBe('fallback-plugin');
+    });
+  });
+
+  describe('SHELL_ADVISORY_HEADER', () => {
+    it('provides standard security warning', () => {
+      expect(SHELL_ADVISORY_HEADER).toContain('ADVISORY');
+      expect(SHELL_ADVISORY_HEADER).toContain('Maintainers must review commands and test locally');
     });
   });
 });

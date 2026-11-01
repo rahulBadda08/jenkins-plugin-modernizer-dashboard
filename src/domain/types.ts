@@ -82,7 +82,7 @@ export interface PluginInsight {
 }
 
 export interface EnrichedPlugin extends PluginData {
-  activeMigration: Migration | null;
+  activeMigration: Migration;
   insight: PluginInsight;
   healthScore: number;
 }

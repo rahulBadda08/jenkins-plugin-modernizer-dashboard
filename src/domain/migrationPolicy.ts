@@ -1,4 +1,13 @@
-import type { Migration } from './types';
+import type { Migration, PluginData } from './types';
+
+export const EMPTY_MIGRATION: Migration = {
+  migrationName: 'None',
+  migrationStatus: 'UNKNOWN',
+  pullRequestStatus: 'UNKNOWN',
+  pullRequestUrl: '',
+  tags: [],
+  timestamp: '',
+};
 
 export function parseMigrationTimestamp(timestamp: string): number {
   if (!timestamp || typeof timestamp !== 'string') return 0;
@@ -10,7 +19,7 @@ export function parseMigrationTimestamp(timestamp: string): number {
   return isNaN(parsed) ? 0 : parsed;
 }
 
-export function selectActiveMigration(migrations: Migration[]): Migration | null {
+export function selectActiveMigration(migrations?: Migration[] | null): Migration | null {
   if (!migrations || migrations.length === 0) return null;
   if (migrations.length === 1) return migrations[0];
 
@@ -24,4 +33,10 @@ export function selectActiveMigration(migrations: Migration[]): Migration | null
   });
 
   return sorted[0] || null;
+}
+
+export function getActiveMigration(pluginOrMigrations?: PluginData | Migration[] | null): Migration {
+  if (!pluginOrMigrations) return EMPTY_MIGRATION;
+  const list = Array.isArray(pluginOrMigrations) ? pluginOrMigrations : pluginOrMigrations.migrations;
+  return selectActiveMigration(list) || EMPTY_MIGRATION;
 }

@@ -29,7 +29,7 @@ jobs:
       - name: Setup Node.js Environment
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install Dependencies
@@ -45,6 +45,38 @@ jobs:
           test -f src/data/all_plugins.json
           test -f src/data/manifest.json
 
+      - name: Generate Failure Diagnostics
+        if: failure()
+        run: |
+          echo "### ❌ Ecosystem Telemetry Ingestion Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Automated ingestion from \`jenkins-infra/metadata-plugin-modernizer\` encountered critical errors." >> $GITHUB_STEP_SUMMARY
+          echo "Existing dataset was preserved. Inspect workflow execution logs for network or validation failures." >> $GITHUB_STEP_SUMMARY
+
+      - name: Report Ingestion Summary
+        if: success()
+        run: |
+          node -e '
+            const fs = require("fs");
+            if (fs.existsSync("src/data/manifest.json")) {
+              const manifest = JSON.parse(fs.readFileSync("src/data/manifest.json", "utf8"));
+              const summary = [
+                "### 📊 Ingestion Telemetry Summary",
+                "",
+                "| Metric | Value |",
+                "|---|---|",
+                "| **Source Tree SHA** | `" + (manifest.sourceTreeSha || "unknown") + "` |",
+                "| **Discovered Plugins** | " + (manifest.discoveredCount ?? 0) + " |",
+                "| **Successfully Parsed** | " + (manifest.successfulCount ?? 0) + " |",
+                "| **Failed Downloads** | " + (manifest.failedCount ?? 0) + " |",
+                "| **Invalid Reports** | " + (manifest.invalidCount ?? 0) + " |",
+                "| **Success Ratio** | " + ((manifest.successRatio || 0) * 100).toFixed(2) + "% |",
+                "| **Dataset SHA-256** | `" + (manifest.datasetSha256 || "none") + "` |",
+                ""
+              ].join("\n");
+              fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+            }
+          '
+
       - name: Commit Fresh Data
         id: commit-step
         run: |
@@ -56,7 +88,24 @@ jobs:
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             git commit -m "chore(data): nightly autonomous refresh of jenkins ecosystem metadata"
-            git push origin main
+            # Concurrency-safe push with rebase and bounded retry
+            PUSH_SUCCESS=false
+            for attempt in 1 2 3; do
+              echo "Rebasing against origin/main before pushing (attempt $attempt)..."
+              git fetch origin main
+              git rebase origin/main
+              if git push origin main; then
+                echo "Successfully published fresh data commit to main."
+                PUSH_SUCCESS=true
+                break
+              fi
+              echo "Push failed due to concurrent push. Retrying in 3s..."
+              sleep 3
+            done
+            if [ "$PUSH_SUCCESS" = "false" ]; then
+              echo "Error: Failed to push commit after 3 attempts due to persistent remote contention."
+              exit 1
+            fi
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
@@ -77,7 +126,7 @@ jobs:
       - name: Setup Node.js Environment
         uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: '24'
+          node-version-file: '.nvmrc'
           cache: 'npm'
 
       - name: Install Dependencies

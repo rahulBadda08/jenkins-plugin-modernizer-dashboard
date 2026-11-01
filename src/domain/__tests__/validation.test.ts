@@ -27,7 +27,7 @@ describe('validation', () => {
     expect(normalizePRStatus(undefined)).toBe('UNKNOWN');
   });
 
-  it('preserves all baseline fallback fields during migration validation', () => {
+  it('preserves all baseline fallback and metadata fields during migration validation', () => {
     const raw = {
       migrationName: 'Upgrade parent POM',
       migrationStatus: 'SUCCESS',
@@ -37,6 +37,8 @@ describe('validation', () => {
       jenkinsBaseline: '2.452.3',
       targetBaseline: '2.500.0',
       effectiveBaseline: '2.580.2',
+      migrationDescription: 'Automated recipe upgrade to modern parent POM',
+      migrationId: 'recipe-parent-pom-5.12',
       timestamp: '2026-10-31T12-00-00',
     };
 
@@ -46,6 +48,8 @@ describe('validation', () => {
     expect(validated?.jenkinsBaseline).toBe('2.452.3');
     expect(validated?.targetBaseline).toBe('2.500.0');
     expect(validated?.effectiveBaseline).toBe('2.580.2');
+    expect(validated?.migrationDescription).toBe('Automated recipe upgrade to modern parent POM');
+    expect(validated?.migrationId).toBe('recipe-parent-pom-5.12');
   });
 
   it('validates and extracts structured plugin objects', () => {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { EnrichedPlugin, Migration } from '../domain/types';
+import type { EnrichedPlugin } from '../domain/types';
 import { sanitizeCsvCell } from '../domain/security';
 
 const formatLabel = (str: string) => {
@@ -117,7 +117,7 @@ export default function DataExplorer({
 
       // Load data
       filteredPlugins.forEach(plugin => {
-        const migration = plugin.migrations?.[0];
+        const migration = plugin.activeMigration;
         const pName = plugin.pluginName;
         const mStatus = (migration?.migrationStatus || 'UNKNOWN').toUpperCase();
         const prStatus = (migration?.pullRequestStatus || 'UNKNOWN').replace("_", " ").toUpperCase();
@@ -171,7 +171,7 @@ export default function DataExplorer({
     try {
       const headers = ['PLUGIN_NAME', 'MIGRATION_STATUS', 'PR_STATUS', 'REPOSITORY_ACTION_LINK', 'LAST_ANALYSIS_DATE'];
       const rows = filteredPlugins.map(plugin => {
-        const migration = plugin.activeMigration || plugin.migrations?.[0];
+        const migration = plugin.activeMigration;
         const prUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
         return [
           sanitizeCsvCell(plugin.pluginName),
@@ -286,7 +286,7 @@ export default function DataExplorer({
             </thead>
             <tbody>
               {paginatedData.map((plugin: EnrichedPlugin) => {
-                const migration = plugin.activeMigration || plugin.migrations?.[0] || {} as Migration;
+                const migration = plugin.activeMigration;
                 const priority = plugin.insight?.priorities?.severity || { color: 'var(--text-secondary)', status: 'Unknown' };
                 
                 return (
@@ -348,7 +348,7 @@ export default function DataExplorer({
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {paginatedData.map((plugin) => {
-            const migration = plugin.migrations?.[0] || {} as Migration;
+            const migration = plugin.activeMigration;
             return (
               <div 
                 key={plugin.pluginName}

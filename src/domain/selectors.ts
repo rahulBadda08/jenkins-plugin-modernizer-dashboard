@@ -17,7 +17,7 @@ export function filterPlugins(plugins: EnrichedPlugin[], options: FilterOptions)
   const term = (globalSearch || searchTerm || '').trim();
 
   return plugins.filter((plugin) => {
-    const migration = plugin.activeMigration || plugin.migrations[0];
+    const migration = plugin.activeMigration;
     if (!migration) return false;
 
     // 1. Global Search & Strategic Token Matching

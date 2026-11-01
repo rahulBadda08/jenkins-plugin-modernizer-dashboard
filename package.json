@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "homepage": "https://rahulBadda08.github.io/jenkins-plugin-modernizer-dashboard/",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "predev": "node scripts/fetchData.mjs",
     "dev": "vite",

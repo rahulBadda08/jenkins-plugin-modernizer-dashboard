@@ -141,15 +141,77 @@ describe('scoring', () => {
     expect(insight.issueBreakdown.pr.display).toBe('DRAFT PR');
   });
 
-  it('sanitizes plugin names in generated remediation commands', () => {
-    const commands = getRemediationCommands(
+  it('refuses to generate commands for unsafe plugin names and accepts valid ones', () => {
+    const unsafeCommands = getRemediationCommands(
       [
         { label: 'CI Configured', value: false, status: 'failed', description: '' },
       ],
       'plugin-with-special;rm -rf /'
     );
 
-    expect(commands[0]).toContain('--repo jenkins-plugins/plugin-with-specialrm-rf');
-    expect(commands[0]).not.toContain(';');
+    expect(unsafeCommands[0]).toContain('[SECURITY ADVISORY] Refusing to generate remediation commands');
+    expect(unsafeCommands.some(c => c.includes('rm -rf'))).toBe(false);
+    expect(unsafeCommands.some(c => c.includes('--repo'))).toBe(false);
+
+    const safeCommands = getRemediationCommands(
+      [
+        { label: 'CI Configured', value: false, status: 'failed', description: '' },
+      ],
+      'git-plugin'
+    );
+
+    expect(safeCommands.some(c => c.includes('--repo jenkins-plugins/git-plugin'))).toBe(true);
+  });
+
+  it('detects vulnerabilities across multiple security and CVE checks', () => {
+    const pluginWithMultipleSecChecks: PluginData = {
+      pluginName: 'sec-test',
+      pluginRepository: '',
+      migrations: [
+        {
+          migrationName: 'Sec',
+          migrationStatus: 'SUCCESS',
+          pullRequestStatus: 'OPEN',
+          pullRequestUrl: '',
+          tags: [],
+          checkRuns: {
+            'Jenkins Security Scan': 'success',
+            'CVE Vulnerability Audit': 'failure', // One of multiple checks failed
+          },
+          jenkinsVersion: '2.580.2',
+          timestamp: '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const insight = getPluginInsight(pluginWithMultipleSecChecks);
+    // Must flag Vulnerabilities because CVE Audit failed, despite Jenkins Security Scan passing
+    expect(insight.priorities.security.status).toBe('Vulnerabilities');
+    expect(insight.actionInsight.severity).toBe('danger');
+  });
+
+  it('marks Secured only when all security and CVE checks pass', () => {
+    const securedPlugin: PluginData = {
+      pluginName: 'all-sec-passed',
+      pluginRepository: '',
+      migrations: [
+        {
+          migrationName: 'Sec',
+          migrationStatus: 'SUCCESS',
+          pullRequestStatus: 'MERGED',
+          pullRequestUrl: '',
+          tags: [],
+          checkRuns: {
+            'Jenkins Security Scan': 'success',
+            'CVE Audit': 'success',
+          },
+          jenkinsVersion: '2.580.2',
+          timestamp: '2026-10-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const insight = getPluginInsight(securedPlugin);
+    expect(insight.priorities.security.status).toBe('Secured');
   });
 });

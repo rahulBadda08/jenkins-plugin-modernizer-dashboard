@@ -53,6 +53,8 @@ export function validateMigration(raw: unknown): Migration | null {
   const jenkinsBaseline = typeof raw.jenkinsBaseline === 'string' ? raw.jenkinsBaseline : undefined;
   const targetBaseline = typeof raw.targetBaseline === 'string' ? raw.targetBaseline : undefined;
   const effectiveBaseline = typeof raw.effectiveBaseline === 'string' ? raw.effectiveBaseline : undefined;
+  const migrationDescription = typeof raw.migrationDescription === 'string' ? raw.migrationDescription : undefined;
+  const migrationId = typeof raw.migrationId === 'string' ? raw.migrationId : undefined;
   const key = typeof raw.key === 'string' ? raw.key : undefined;
 
   return {
@@ -71,6 +73,8 @@ export function validateMigration(raw: unknown): Migration | null {
     jenkinsBaseline,
     targetBaseline,
     effectiveBaseline,
+    migrationDescription,
+    migrationId,
     timestamp,
     key,
   };

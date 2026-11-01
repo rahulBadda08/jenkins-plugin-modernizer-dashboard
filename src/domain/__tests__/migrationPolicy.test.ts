@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMigrationTimestamp, selectActiveMigration } from '../migrationPolicy';
+import { parseMigrationTimestamp, selectActiveMigration, getActiveMigration, EMPTY_MIGRATION } from '../migrationPolicy';
 import type { Migration } from '../types';
 
 describe('migrationPolicy', () => {
@@ -49,7 +49,7 @@ describe('migrationPolicy', () => {
     expect(active?.migrationStatus).toBe('SUCCESS');
   });
 
-  it('returns null for empty migration arrays', () => {
+  it('returns null for empty migration arrays in selectActiveMigration', () => {
     expect(selectActiveMigration([])).toBeNull();
   });
 
@@ -63,5 +63,11 @@ describe('migrationPolicy', () => {
       timestamp: '2025-01-01T00:00:00Z',
     };
     expect(selectActiveMigration([single])).toEqual(single);
+  });
+
+  it('getActiveMigration returns safe fallback EMPTY_MIGRATION when migrations is empty or null', () => {
+    expect(getActiveMigration(null)).toEqual(EMPTY_MIGRATION);
+    expect(getActiveMigration([])).toEqual(EMPTY_MIGRATION);
+    expect(getActiveMigration({ pluginName: 'sample', pluginRepository: '', migrations: [] })).toEqual(EMPTY_MIGRATION);
   });
 });

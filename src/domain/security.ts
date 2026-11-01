@@ -40,11 +40,42 @@ export function sanitizeCsvCell(value: unknown): string {
 }
 
 /**
- * Sanitizes a shell identifier/argument (e.g. repository name or plugin name).
- * Restricts to safe alphanumeric characters, dots, dashes, and underscores.
+ * Strict allowlist validation pattern for repository and plugin identifiers.
+ * Permits only alphanumeric characters, dots, hyphens, and underscores.
+ */
+export const SAFE_IDENTIFIER_PATTERN = /^[a-zA-Z0-9._-]+$/;
+
+/**
+ * Validates whether an input is a safe shell/repository identifier.
+ * Refuses strings with spaces, command substitution ($(...), `...`), path traversal, or operators.
+ */
+export function isSafeShellArg(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && SAFE_IDENTIFIER_PATTERN.test(value.trim());
+}
+
+/**
+ * Safe shell identifier resolver:
+ * - If the value strictly conforms to the safe identifier allowlist, returns the trimmed value.
+ * - If invalid, refuses to generate commands and returns fallback.
+ * - Avoids silent character stripping that mutates malformed or malicious input into unintended target names.
  */
 export function sanitizeShellArg(value: string, fallback = 'unknown'): string {
   if (!value || typeof value !== 'string') return fallback;
-  const sanitized = value.replace(/[^a-zA-Z0-9._-]/g, '');
-  return sanitized || fallback;
+  const trimmed = value.trim();
+  if (SAFE_IDENTIFIER_PATTERN.test(trimmed)) {
+    return trimmed;
+  }
+  return fallback;
 }
+
+/**
+ * Standard security advisory banner prepended to generated remediation shell scripts.
+ * Emphasizes that generated commands are non-authoritative recommendations requiring human review.
+ */
+export const SHELL_ADVISORY_HEADER = [
+  '# -----------------------------------------------------------------------------',
+  '# ADVISORY: The following commands are automated recommendations based on',
+  '# static metadata analysis. Maintainers must review commands and test locally',
+  '# before executing in production environments.',
+  '# -----------------------------------------------------------------------------',
+].join('\n');
