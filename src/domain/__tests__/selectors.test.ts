@@ -162,6 +162,28 @@ describe('selectors', () => {
     expect(all).toHaveLength(3);
   });
 
+  it('filters plugins using typed quick filters without stuffing tokens into search', () => {
+    const roadmap = filterPlugins(samplePlugins, {
+      quickFilter: 'ROADMAP_TOP_20',
+      roadmapList: ['git', 'workflow-aggregator'],
+    });
+    expect(roadmap).toHaveLength(2);
+    expect(roadmap.map(p => p.pluginName)).toEqual(['git', 'workflow-aggregator']);
+
+    const legacy = filterPlugins(samplePlugins, {
+      quickFilter: 'LEGACY_BASELINE',
+      legacyAlignmentNames: ['subversion'],
+    });
+    expect(legacy).toHaveLength(1);
+    expect(legacy[0].pluginName).toBe('subversion');
+  });
+
+  it('performs pure text search without magic token parsing', () => {
+    // If a user types "BASELINE_" into text search, it searches purely by text, matching none of sample plugins
+    const searchResult = filterPlugins(samplePlugins, { searchTerm: 'BASELINE_CRITICAL' });
+    expect(searchResult).toHaveLength(0);
+  });
+
   it('computes centralized workbench metrics with ranking and outdated counts', () => {
     const metrics = computeWorkbenchMetrics(samplePlugins, 3);
     expect(metrics.totalCount).toBe(3);

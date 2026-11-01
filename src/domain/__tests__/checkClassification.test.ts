@@ -4,7 +4,10 @@ import {
   classifyBOM,
   classifyParentPom,
   classifyCI,
+  classifyBuild,
+  classifyTest,
   classifySecurity,
+  classifyCVE,
   classifyAllChecks,
 } from '../checkClassification';
 
@@ -85,6 +88,36 @@ describe('checkClassification', () => {
     });
   });
 
+  describe('classifyBuild', () => {
+    it('detects build status from summary or checkRuns', () => {
+      expect(classifyBuild({}, 'Maven Build Passed').status).toBe('passed');
+      expect(classifyBuild({ 'maven-compile': 'failure' }).status).toBe('failed');
+      expect(classifyBuild({ 'package-jar': 'success' }).status).toBe('passed');
+    });
+  });
+
+  describe('classifyTest', () => {
+    it('detects test status from test-specific runners', () => {
+      expect(classifyTest({ 'jth-test': 'failure' }).status).toBe('failed');
+      expect(classifyTest({ 'surefire-report': 'success' }).status).toBe('passed');
+      expect(classifyTest({ unrelated: 'success' }).status).toBe('unreported');
+    });
+  });
+
+  describe('classifyCVE', () => {
+    it('detects CVE vulnerabilities specifically', () => {
+      const res = classifyCVE({ 'CVE-2026-1234': 'failure' });
+      expect(res.status).toBe('failed');
+      expect(res.hasSecurityRisk).toBe(true);
+    });
+
+    it('returns clean when CVE checks pass', () => {
+      const res = classifyCVE({ 'cve-audit': 'success' });
+      expect(res.status).toBe('passed');
+      expect(res.isSecurityPassed).toBe(true);
+    });
+  });
+
   describe('classifyAllChecks', () => {
     it('returns structured summary across all categories', () => {
       const all = classifyAllChecks(
@@ -92,13 +125,17 @@ describe('checkClassification', () => {
           BOM: 'success',
           'Parent Pom': 'failure',
           'Security Review': 'success',
+          'CVE-Check': 'success',
+          'surefire-tests': 'success',
         },
         'success'
       );
       expect(all.bom.status).toBe('passed');
       expect(all.parentPom.status).toBe('failed');
       expect(all.ci.status).toBe('passed');
+      expect(all.test.status).toBe('passed');
       expect(all.security.isSecurityPassed).toBe(true);
+      expect(all.cve.isSecurityPassed).toBe(true);
     });
   });
 });

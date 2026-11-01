@@ -2,10 +2,11 @@ import type { EnrichedPlugin } from './types';
 import {
   type BaselineBucket,
   getBaselineBucket,
-  getBaselineBucketByToken,
   getMigrationBaselineVersion,
   isVersionOutdated,
 } from './baselineParser';
+
+export type QuickFilterMode = 'ALL' | 'ROADMAP_TOP_20' | 'LEGACY_BASELINE';
 
 export interface FilterOptions {
   globalSearch?: string;
@@ -15,6 +16,7 @@ export interface FilterOptions {
   prFilter?: string;
   severityFilter?: string;
   baselineFilter?: BaselineBucket | 'ALL';
+  quickFilter?: QuickFilterMode;
   roadmapList?: string[];
   legacyAlignmentNames?: string[];
 }
@@ -30,36 +32,32 @@ export interface WorkbenchMetrics {
 }
 
 export function filterPlugins(plugins: EnrichedPlugin[], options: FilterOptions): EnrichedPlugin[] {
-  const { globalSearch, searchTerm, topicFilter, statusFilter, prFilter, severityFilter, baselineFilter, roadmapList, legacyAlignmentNames } = options;
+  const { globalSearch, searchTerm, topicFilter, statusFilter, prFilter, severityFilter, baselineFilter, quickFilter, roadmapList, legacyAlignmentNames } = options;
   const term = (globalSearch || searchTerm || '').trim();
 
   return plugins.filter((plugin) => {
     const migration = plugin.activeMigration;
     if (!migration) return false;
 
-    // 1. Global Search & Strategic Token Matching
+    // 1. Pure Text Search (Decoupled from tokens - pure freeform text query)
     if (term) {
-      if (term === 'ROADMAP_TOP_20') {
-        const matchesRoadmap = roadmapList?.includes(plugin.pluginName) || false;
-        if (!matchesRoadmap) return false;
-      } else if (term === 'LEGACY_BASELINE') {
-        const matchesLegacy = legacyAlignmentNames?.includes(plugin.pluginName) || false;
-        if (!matchesLegacy) return false;
-      } else if (term.startsWith('BASELINE_')) {
-        const targetBucket = getBaselineBucketByToken(term);
-        const pluginBucket = getBaselineBucket(migration);
-        const matchesBucket = !!targetBucket && pluginBucket === targetBucket;
-        if (!matchesBucket) return false;
-      } else {
-        const lowerTerm = term.toLowerCase();
-        const matchName = plugin.pluginName.toLowerCase().includes(lowerTerm);
-        const matchRepo = plugin.pluginRepository.toLowerCase().includes(lowerTerm);
-        const matchTags = (migration.tags || []).some(t => t.toLowerCase().includes(lowerTerm));
-        if (!matchName && !matchRepo && !matchTags) return false;
-      }
+      const lowerTerm = term.toLowerCase();
+      const matchName = plugin.pluginName.toLowerCase().includes(lowerTerm);
+      const matchRepo = plugin.pluginRepository.toLowerCase().includes(lowerTerm);
+      const matchTags = (migration.tags || []).some(t => t.toLowerCase().includes(lowerTerm));
+      if (!matchName && !matchRepo && !matchTags) return false;
     }
 
-    // 1b. Typed Baseline Cohort Match
+    // 2. Typed Quick Filter (Priority Roadmap / Legacy Baseline Cohorts)
+    if (quickFilter === 'ROADMAP_TOP_20') {
+      const matchesRoadmap = roadmapList?.includes(plugin.pluginName) || false;
+      if (!matchesRoadmap) return false;
+    } else if (quickFilter === 'LEGACY_BASELINE') {
+      const matchesLegacy = legacyAlignmentNames?.includes(plugin.pluginName) || false;
+      if (!matchesLegacy) return false;
+    }
+
+    // 3. Typed Baseline Cohort Match (Strict domain enum: aligned, warning, critical, unspecified)
     if (baselineFilter && baselineFilter !== 'ALL') {
       const pluginBucket = getBaselineBucket(migration);
       if (pluginBucket !== baselineFilter) return false;
