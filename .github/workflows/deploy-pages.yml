@@ -47,6 +47,9 @@ jobs:
       - name: Run Vitest Unit Tests
         run: npm test
 
+      - name: Verify Dataset Integrity
+        run: node scripts/verifyData.mjs
+
   build-and-deploy:
     name: Build & Publish to Pages
     needs: quality-gate
