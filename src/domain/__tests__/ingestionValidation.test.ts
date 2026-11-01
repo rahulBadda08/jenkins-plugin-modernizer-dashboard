@@ -1,14 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 import {
   validateMigrationRecord,
   validatePluginReport,
   normalizeMigrationStatus,
   normalizePRStatus,
+  normalizePluginKey,
   computeDatasetHash,
   fetchWithRetry,
 } from '../../../scripts/fetchData.mjs';
+import { verifyDatasetFiles } from '../../../scripts/verifyData.mjs';
 
 describe('Ingestion Validation & Normalization', () => {
+  describe('normalizePluginKey', () => {
+    it('normalizes names to lowercase trimmed string', () => {
+      expect(normalizePluginKey(' Git-Plugin ')).toBe('git-plugin');
+      expect(normalizePluginKey('WORKFLOW-JOB')).toBe('workflow-job');
+      expect(normalizePluginKey('')).toBe('');
+      expect(normalizePluginKey(null)).toBe('');
+      expect(normalizePluginKey(123)).toBe('');
+    });
+  });
+
   describe('normalizeMigrationStatus', () => {
     it('normalizes status variants correctly', () => {
       expect(normalizeMigrationStatus('SUCCESS')).toBe('success');
@@ -133,10 +148,10 @@ describe('Ingestion Validation & Normalization', () => {
       }
     });
 
-    it('rejects duplicate plugin names', () => {
+    it('rejects duplicate plugin names case-insensitively', () => {
       const seen = new Set<string>(['git']);
       const rawReport = {
-        pluginName: 'git',
+        pluginName: 'Git',
         migrations: [],
       };
 
@@ -183,10 +198,11 @@ describe('Ingestion Validation & Normalization', () => {
   });
 
   describe('computeDatasetHash', () => {
-    it('computes deterministic SHA-256 hash', () => {
-      const content = '{"test": true}\n';
-      const hash1 = computeDatasetHash(content);
-      const hash2 = computeDatasetHash(content);
+    it('computes deterministic SHA-256 hash across LF and CRLF', () => {
+      const contentLf = '{"test": true}\n';
+      const contentCrlf = '{"test": true}\r\n';
+      const hash1 = computeDatasetHash(contentLf);
+      const hash2 = computeDatasetHash(contentCrlf);
       expect(hash1).toBe(hash2);
       expect(hash1).toHaveLength(64);
       expect(hash1).toMatch(/^[a-f0-9]{64}$/);
@@ -208,8 +224,6 @@ describe('Ingestion Validation & Normalization', () => {
       const mockFetch = vi.fn();
       let authDroppedCalled = false;
 
-      // 1st call with auth header returns 401
-      // 2nd call unauthenticated returns 200 with data
       mockFetch.mockImplementation(async (_url, options) => {
         if (options?.headers?.Authorization) {
           return {
@@ -263,6 +277,40 @@ describe('Ingestion Validation & Normalization', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
+    it('aborts immediately on 400 Bad Request without retry loop', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 400,
+        statusText: 'Bad Request',
+        headers: new Headers(),
+      });
+
+      globalThis.fetch = mockFetch;
+
+      await expect(
+        fetchWithRetry('https://api.github.com/bad-request', {}, 3)
+      ).rejects.toThrow('HTTP 400');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('aborts immediately on 422 Unprocessable Entity without retry loop', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 422,
+        statusText: 'Unprocessable Entity',
+        headers: new Headers(),
+      });
+
+      globalThis.fetch = mockFetch;
+
+      await expect(
+        fetchWithRetry('https://api.github.com/unprocessable', {}, 3)
+      ).rejects.toThrow('HTTP 422');
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('extracts rate limit details on 403 when limit is exhausted', async () => {
       const headers = new Headers();
       headers.set('x-ratelimit-remaining', '0');
@@ -280,6 +328,87 @@ describe('Ingestion Validation & Normalization', () => {
       await expect(
         fetchWithRetry('https://api.github.com/ratelimited', {}, 3)
       ).rejects.toThrow('GitHub API Rate limit exceeded');
+    });
+  });
+
+  describe('verifyDatasetFiles (scripts/verifyData.mjs)', () => {
+    let tempDir: string;
+
+    beforeEach(async () => {
+      tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'verify-data-test-'));
+    });
+
+    afterEach(async () => {
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    });
+
+    it('passes for a valid dataset and manifest matching checksum', async () => {
+      const plugins = [
+        { pluginName: 'alpha', migrations: [] },
+        { pluginName: 'beta', migrations: [] },
+      ];
+      const datasetJson = JSON.stringify(plugins, null, 2) + '\n';
+      const hash = computeDatasetHash(datasetJson);
+      const manifest = {
+        datasetSha256: hash,
+        successfulCount: 2,
+        successRatio: 1.0,
+      };
+
+      const outputFile = path.join(tempDir, 'all_plugins.json');
+      const manifestFile = path.join(tempDir, 'manifest.json');
+
+      await fs.writeFile(outputFile, datasetJson, 'utf8');
+      await fs.writeFile(manifestFile, JSON.stringify(manifest), 'utf8');
+
+      const result = await verifyDatasetFiles({ outputFile, manifestFile });
+      expect(result.success).toBe(true);
+      expect(result.count).toBe(2);
+      expect(result.sha256).toBe(hash);
+    });
+
+    it('fails if computed checksum does not match manifest', async () => {
+      const plugins = [{ pluginName: 'alpha', migrations: [] }];
+      const datasetJson = JSON.stringify(plugins);
+      const manifest = {
+        datasetSha256: '0000000000000000000000000000000000000000000000000000000000000000',
+        successfulCount: 1,
+        successRatio: 1.0,
+      };
+
+      const outputFile = path.join(tempDir, 'all_plugins.json');
+      const manifestFile = path.join(tempDir, 'manifest.json');
+
+      await fs.writeFile(outputFile, datasetJson, 'utf8');
+      await fs.writeFile(manifestFile, JSON.stringify(manifest), 'utf8');
+
+      await expect(
+        verifyDatasetFiles({ outputFile, manifestFile })
+      ).rejects.toThrow('Checksum mismatch');
+    });
+
+    it('fails if duplicate plugins exist in dataset', async () => {
+      const plugins = [
+        { pluginName: 'alpha', migrations: [] },
+        { pluginName: 'Alpha', migrations: [] },
+      ];
+      const datasetJson = JSON.stringify(plugins);
+      const hash = computeDatasetHash(datasetJson);
+      const manifest = {
+        datasetSha256: hash,
+        successfulCount: 2,
+        successRatio: 1.0,
+      };
+
+      const outputFile = path.join(tempDir, 'all_plugins.json');
+      const manifestFile = path.join(tempDir, 'manifest.json');
+
+      await fs.writeFile(outputFile, datasetJson, 'utf8');
+      await fs.writeFile(manifestFile, JSON.stringify(manifest), 'utf8');
+
+      await expect(
+        verifyDatasetFiles({ outputFile, manifestFile })
+      ).rejects.toThrow('Duplicate pluginName found in dataset');
     });
   });
 });

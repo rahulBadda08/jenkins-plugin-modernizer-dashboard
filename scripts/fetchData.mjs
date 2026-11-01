@@ -20,6 +20,7 @@ const USER_AGENT = 'jenkins-plugin-modernizer-dashboard/1.0 (+https://github.com
 const BATCH_SIZE = 30;
 const MIN_SUCCESS_RATIO = 0.95; // 95% threshold to guard against partial data publishing
 const MAX_RETRIES = 3;
+const DEFAULT_TIMEOUT_MS = 15000;
 
 export function getAuthHeaders() {
     const headers = {
@@ -58,21 +59,28 @@ function sleep(ms) {
 }
 
 export async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES, options = {}) {
-    const { allowAuthFallback = true, onAuthFallback } = options;
+    const { allowAuthFallback = true, onAuthFallback, timeoutMs = DEFAULT_TIMEOUT_MS } = options;
     let currentHeaders = { ...headers };
 
     for (let attempt = 0; attempt < maxRetries; attempt++) {
         try {
-            const res = await fetch(url, { headers: currentHeaders });
+            const fetchOptions = { headers: currentHeaders };
+            if (options.signal) {
+                fetchOptions.signal = options.signal;
+            } else if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+                fetchOptions.signal = AbortSignal.timeout(timeoutMs);
+            }
+
+            const res = await fetch(url, fetchOptions);
 
             if (res.ok) {
                 return await res.json();
             }
 
             const status = res.status;
-            const rateLimitRemaining = res.headers.get('x-ratelimit-remaining');
-            const rateLimitReset = res.headers.get('x-ratelimit-reset');
-            const retryAfter = res.headers.get('retry-after');
+            const rateLimitRemaining = res.headers?.get ? res.headers.get('x-ratelimit-remaining') : null;
+            const rateLimitReset = res.headers?.get ? res.headers.get('x-ratelimit-reset') : null;
+            const retryAfter = res.headers?.get ? res.headers.get('retry-after') : null;
 
             // Handle 401 Unauthorized
             if (status === 401) {
@@ -82,8 +90,13 @@ export async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES, opt
                     if (typeof onAuthFallback === 'function') {
                         onAuthFallback();
                     }
-                    // Attempt immediate unauthenticated retry for public repository assets
-                    const unauthRes = await fetch(url, { headers: currentHeaders });
+                    const fallbackOptions = { headers: currentHeaders };
+                    if (options.signal) {
+                        fallbackOptions.signal = options.signal;
+                    } else if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+                        fallbackOptions.signal = AbortSignal.timeout(timeoutMs);
+                    }
+                    const unauthRes = await fetch(url, fallbackOptions);
                     if (unauthRes.ok) {
                         return await unauthRes.json();
                     }
@@ -115,7 +128,13 @@ export async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES, opt
                     if (typeof onAuthFallback === 'function') {
                         onAuthFallback();
                     }
-                    const unauthRes = await fetch(url, { headers: currentHeaders });
+                    const fallbackOptions = { headers: currentHeaders };
+                    if (options.signal) {
+                        fallbackOptions.signal = options.signal;
+                    } else if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+                        fallbackOptions.signal = AbortSignal.timeout(timeoutMs);
+                    }
+                    const unauthRes = await fetch(url, fallbackOptions);
                     if (unauthRes.ok) {
                         return await unauthRes.json();
                     }
@@ -125,10 +144,22 @@ export async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES, opt
                 throw err;
             }
 
-            // Transient errors: 429, 500, 502, 503, 504
-            const isTransient = status === 429 || (status >= 500 && status < 600);
+            // All other 4xx errors (e.g. 400 Bad Request, 422 Unprocessable Entity) are permanent non-transient errors,
+            // except 408 (Request Timeout) and 429 (Too Many Requests).
+            if (status >= 400 && status < 500 && status !== 408 && status !== 429) {
+                const err = new Error(`HTTP ${status} (${res.statusText || 'Client Error'})`);
+                err.isNonTransient = true;
+                throw err;
+            }
+
+            // Transient errors: 408, 429, 500, 502, 503, 504
+            const isTransient = status === 408 || status === 429 || (status >= 500 && status < 600);
             if (!isTransient || attempt === maxRetries - 1) {
-                throw new Error(`HTTP ${status} (${res.statusText || 'Server Error'})`);
+                const err = new Error(`HTTP ${status} (${res.statusText || 'Server Error'})`);
+                if (!isTransient) {
+                    err.isNonTransient = true;
+                }
+                throw err;
             }
 
             // Exponential backoff with randomized jitter (0 - 500ms)
@@ -146,7 +177,7 @@ export async function fetchWithRetry(url, headers, maxRetries = MAX_RETRIES, opt
             }
             const jitterMs = Math.floor(Math.random() * 500);
             const backoffMs = Math.pow(2, attempt) * 1000 + jitterMs;
-            console.warn(`[WARN] Network error fetching ${url}: ${err.message}. Retrying in ${backoffMs}ms with jitter (attempt ${attempt + 1}/${maxRetries})...`);
+            console.warn(`[WARN] Network/Transient error fetching ${url}: ${err.message}. Retrying in ${backoffMs}ms with jitter (attempt ${attempt + 1}/${maxRetries})...`);
             await sleep(backoffMs);
         }
     }
@@ -168,6 +199,10 @@ export function normalizePRStatus(raw) {
     const lower = raw.trim().toLowerCase();
     if (['merged', 'open', 'closed', 'draft'].includes(lower)) return lower;
     return '';
+}
+
+export function normalizePluginKey(name) {
+    return typeof name === 'string' ? name.trim().toLowerCase() : '';
 }
 
 export function validateMigrationRecord(migration, index = 0) {
@@ -245,7 +280,12 @@ export function validatePluginReport(data, filePath, seenPluginNames = new Set()
         return { valid: false, reason: 'Missing or invalid pluginName' };
     }
     const pluginName = data.pluginName.trim();
-    if (seenPluginNames.has(pluginName)) {
+    const pluginKey = normalizePluginKey(pluginName);
+    if (!pluginKey) {
+        return { valid: false, reason: 'Missing or invalid pluginName' };
+    }
+
+    if (seenPluginNames.has(pluginKey) || seenPluginNames.has(pluginName)) {
         return { valid: false, reason: `Duplicate pluginName detected: "${pluginName}"` };
     }
     if (!Array.isArray(data.migrations)) {
@@ -264,6 +304,7 @@ export function validatePluginReport(data, filePath, seenPluginNames = new Set()
         }
     }
 
+    seenPluginNames.add(pluginKey);
     seenPluginNames.add(pluginName);
 
     const cleanedPlugin = {
@@ -278,11 +319,16 @@ export function validatePluginReport(data, filePath, seenPluginNames = new Set()
         plugin: cleanedPlugin,
         invalidMigrationsCount,
         totalMigrationsCount: data.migrations.length,
+        hasZeroMigrations: cleanedMigrations.length === 0,
     };
 }
 
+export function normalizeEol(content) {
+    return typeof content === 'string' ? content.replace(/\r\n/g, '\n') : '';
+}
+
 export function computeDatasetHash(content) {
-    return crypto.createHash('sha256').update(content, 'utf8').digest('hex');
+    return crypto.createHash('sha256').update(normalizeEol(content), 'utf8').digest('hex');
 }
 
 async function cleanupTmpFiles() {
@@ -334,7 +380,10 @@ export async function run() {
     const failedPaths = [];
     const invalidReports = [];
     const seenPluginNames = new Set();
+    let totalMigrations = 0;
+    let totalValidMigrations = 0;
     let totalInvalidMigrations = 0;
+    let reportsWithZeroValidMigrations = 0;
     let completed = 0;
     let authDropped = false;
 
@@ -370,7 +419,12 @@ export async function run() {
                 const validation = validatePluginReport(res.data, res.filePath, seenPluginNames);
                 if (validation.valid) {
                     compiledData.push(validation.plugin);
+                    totalMigrations += validation.totalMigrationsCount;
+                    totalValidMigrations += validation.plugin.migrations.length;
                     totalInvalidMigrations += validation.invalidMigrationsCount;
+                    if (validation.hasZeroMigrations) {
+                        reportsWithZeroValidMigrations++;
+                    }
                 } else {
                     invalidReports.push({ path: res.filePath, reason: validation.reason });
                 }
@@ -394,12 +448,15 @@ export async function run() {
     const successRatio = discoveredCount > 0 ? successfulCount / discoveredCount : 0;
 
     console.log(`\n── Ingestion Telemetry Summary ──`);
-    console.log(`Discovered:          ${discoveredCount}`);
-    console.log(`Successful:          ${successfulCount}`);
-    console.log(`Failed:              ${failedCount}`);
-    console.log(`Invalid Reports:     ${invalidCount}`);
-    console.log(`Invalid Migrations:  ${totalInvalidMigrations}`);
-    console.log(`Success Rate:        ${(successRatio * 100).toFixed(2)}% (Target: >= ${(MIN_SUCCESS_RATIO * 100)}%)`);
+    console.log(`Discovered Reports:              ${discoveredCount}`);
+    console.log(`Valid Reports (Successful):      ${successfulCount}`);
+    console.log(`Failed Downloads:                ${failedCount}`);
+    console.log(`Invalid Reports:                 ${invalidCount}`);
+    console.log(`Total Migrations Encountered:    ${totalMigrations}`);
+    console.log(`Valid Migrations Extracted:      ${totalValidMigrations}`);
+    console.log(`Invalid Migrations Rejected:     ${totalInvalidMigrations}`);
+    console.log(`Plugins with Zero Migrations:    ${reportsWithZeroValidMigrations}`);
+    console.log(`Success Rate:                    ${(successRatio * 100).toFixed(2)}% (Target: >= ${(MIN_SUCCESS_RATIO * 100)}%)`);
 
     // 5. Enforce success threshold
     if (successRatio < MIN_SUCCESS_RATIO) {
@@ -422,7 +479,10 @@ export async function run() {
         successfulCount,
         failedCount,
         invalidCount,
+        totalMigrations,
+        validMigrations: totalValidMigrations,
         invalidMigrationsCount: totalInvalidMigrations,
+        reportsWithZeroValidMigrations,
         successRatio: parseFloat(successRatio.toFixed(4)),
         failures: failedPaths.slice(0, 50),
         invalids: invalidReports.slice(0, 50),
@@ -459,10 +519,26 @@ export async function run() {
         console.log(`Successfully published data manifest to ${MANIFEST_FILE}`);
     } catch (err) {
         console.error(`Publication failed: ${err.message}. Initiating rollback to previous state...`);
-        if (hasOutputBackup) await fs.copyFile(BACKUP_OUTPUT_FILE, OUTPUT_FILE).catch(() => {});
-        if (hasManifestBackup) await fs.copyFile(BACKUP_MANIFEST_FILE, MANIFEST_FILE).catch(() => {});
+        const rollbackErrors = [];
+        if (hasOutputBackup) {
+            try {
+                await fs.copyFile(BACKUP_OUTPUT_FILE, OUTPUT_FILE);
+            } catch (rollbackErr) {
+                rollbackErrors.push(`Failed restoring ${OUTPUT_FILE}: ${rollbackErr.message}`);
+            }
+        }
+        if (hasManifestBackup) {
+            try {
+                await fs.copyFile(BACKUP_MANIFEST_FILE, MANIFEST_FILE);
+            } catch (rollbackErr) {
+                rollbackErrors.push(`Failed restoring ${MANIFEST_FILE}: ${rollbackErr.message}`);
+            }
+        }
+        if (rollbackErrors.length > 0) {
+            console.error('[CRITICAL] Rollback was incomplete:', rollbackErrors.join('; '));
+        }
         await cleanupTmpFiles();
-        throw new Error(`Failed to commit atomic files (rolled back): ${err.message}`);
+        throw new Error(`Failed to commit atomic files (rollback attempted): ${err.message}`);
     }
 
     console.log(`Ingestion SUCCESS! Extracted ${successfulCount} validated Jenkins plugins.`);
