@@ -41,6 +41,7 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 ├── nginx.conf                     # Production Nginx reverse proxy configuration with security headers
 ├── Jenkinsfile                    # Declarative multi-stage Jenkins CI pipeline
 ├── scripts/
+│   ├── checkBundleSize.mjs        # Performance budget & bundle size threshold gate
 │   ├── fetchData.mjs              # Resilient data ingestion pipeline (credential fallback, backoff, jitter)
 │   └── verifyData.mjs             # Standalone dataset schema & SHA-256 integrity verification
 ├── docs/                          # Detailed technical documentation
@@ -91,6 +92,7 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 | **Release Management** | ✅ **Enforced** | Semantic versioning (`v1.0.0`), annotated git tags, and automated GitHub Release publishing (`release.yml`). |
 | **Repository Governance** | ✅ **Enforced** | `.github/CODEOWNERS`, `.editorconfig`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and issue/PR templates. |
 | **Infrastructure as Code (IaC)**| ✅ **Enforced** | Complete Terraform module in `terraform/` for Amazon S3 + CloudFront OAC + Security Headers deployment. |
+| **Dataset Integrity Verification** | ✅ **Enforced** | Standalone `scripts/verifyData.mjs` verifies SHA-256 manifest hash with deterministic LF line-ending normalization prior to builds in CI, Docker, and Jenkins. |
 | **Command Injection Defense** | ✅ **Enforced** | `isSafeShellArg()` enforces strict `/^[a-zA-Z0-9_-]+$/` allowlist with mandatory advisory headers before script generation. |
 | **Spreadsheet Sanitization** | ✅ **Enforced** | `sanitizeCsvCell()` neutralizes formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`, `|`) in CSV and Excel exports. |
 | **URL Sanitization & Defense** | ✅ **Enforced** | `isValidExternalUrl()` and `sanitizeExternalUrl()` reject non-HTTP schemes (`javascript:`, `data:`, `file:`) and embedded credentials (`user:pass@`). |
@@ -99,6 +101,12 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 - **URL Sanitization & Credential Defense**: Every external link (repository URLs, issues links, pull requests) is validated using `isValidExternalUrl()` and sanitized with `sanitizeExternalUrl()` in `src/domain/security.ts`. Embedded user credentials (`user:pass@`), non-HTTP schemes (`javascript:`, `data:`, `file:`), and malformed hosts are rejected. Unsafe links are automatically neutralized and suppressed by security policy in both the UI and export layers.
 - **Strict Shell Identifier Allowlist**: `isSafeShellArg()` validates plugin names against `/^[a-zA-Z0-9_-]+$/` before generating advisory remediation bash scripts. Input failing validation produces explicit warning comments rather than silently mutating names.
 - **Spreadsheet Formula Injection Defense**: `sanitizeCsvCell()` neutralizes execution of formulas in Excel and CSV exports by prepending a single quote to triggers (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`, `|`).
+
+### 🛡️ Independent Cryptographic Verification (`scripts/verifyData.mjs`)
+- **Decoupled Verification**: `scripts/verifyData.mjs` runs as a completely independent script from `fetchData.mjs`. It verifies dataset schema, counts, and checksums prior to any build step (`npm run data:verify`).
+- **Deterministic LF Normalization**: Strips Windows `CRLF` line breaks to Unix `LF` prior to computing the SHA-256 digest, guaranteeing identical checksum evaluation across Windows developer machines and Ubuntu Linux GitHub Actions runners.
+- **Strict Ingestion Schema & Threshold Enforcement**: Asserts that `manifest.json` specifies `>= 95%` success ratio, that all 431 plugins parse cleanly with valid unique names (case-insensitive deduplication), and that the computed hash strictly matches `manifest.datasetSha256`.
+- **Enforced Across All Pipelines**: Executed inside `npm run check`, `.github/workflows/ci.yml`, `.github/workflows/deploy-pages.yml`, `.github/workflows/sync-plugin-data.yml`, `Dockerfile`, and `Jenkinsfile`.
 
 ---
 
