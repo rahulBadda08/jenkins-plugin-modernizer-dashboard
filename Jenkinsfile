@@ -2,7 +2,6 @@ pipeline {
     agent {
         docker {
             image 'node:24-alpine'
-            args '-u root:root'
         }
     }
 
@@ -14,6 +13,8 @@ pipeline {
 
     environment {
         CI = 'true'
+        HOME = "${WORKSPACE}"
+        npm_config_cache = "${WORKSPACE}/.npm"
         npm_config_fund = 'false'
         npm_config_audit = 'false'
     }

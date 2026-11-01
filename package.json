@@ -1,7 +1,7 @@
 {
   "name": "jenkins-plugin-modernizer-dashboard",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.4",
   "type": "module",
   "homepage": "https://rahulBadda08.github.io/jenkins-plugin-modernizer-dashboard/",
   "engines": {
