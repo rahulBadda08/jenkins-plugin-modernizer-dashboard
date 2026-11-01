@@ -8,11 +8,14 @@
     "node": ">=24.0.0"
   },
   "scripts": {
-    "predev": "node scripts/fetchData.mjs",
     "dev": "vite",
-    "prebuild": "node scripts/fetchData.mjs",
     "build": "vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc -b",
     "test": "vitest run",
+    "data:refresh": "node scripts/fetchData.mjs",
+    "data:verify": "node scripts/verifyData.mjs",
+    "check": "npm run lint && npm run typecheck && npm test && npm run data:verify && npm run build",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
