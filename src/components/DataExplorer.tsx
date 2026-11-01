@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { EnrichedPlugin } from '../domain/types';
-import { sanitizeCsvCell } from '../domain/security';
+import { sanitizeCsvCell, isValidExternalUrl } from '../domain/security';
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -123,13 +123,15 @@ export default function DataExplorer({
         const prStatus = (migration?.pullRequestStatus || 'UNKNOWN').replace("_", " ").toUpperCase();
         const ts = formatTimestamp(migration?.timestamp || "");
         
-        const prUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
+        const rawUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
+        const hasValidUrl = isValidExternalUrl(rawUrl);
+        const prUrl = hasValidUrl ? rawUrl : '';
 
         const row = sheet.addRow({
           pluginName: pName,
           migrationStatus: mStatus,
           prStatus: prStatus,
-          actionUrl: prUrl ? { text: 'View Repository / PR', hyperlink: prUrl } : 'N/A',
+          actionUrl: hasValidUrl ? { text: 'View Repository / PR', hyperlink: prUrl } : 'N/A',
           analysisDate: ts
         });
 
@@ -147,7 +149,7 @@ export default function DataExplorer({
 
         // Action URL styling
         const urlCell = row.getCell('actionUrl');
-        if (prUrl) {
+        if (hasValidUrl) {
           urlCell.font = { color: { argb: 'FF3B82F6' }, underline: true };
         }
       });
@@ -172,7 +174,9 @@ export default function DataExplorer({
       const headers = ['PLUGIN_NAME', 'MIGRATION_STATUS', 'PR_STATUS', 'REPOSITORY_ACTION_LINK', 'LAST_ANALYSIS_DATE'];
       const rows = filteredPlugins.map(plugin => {
         const migration = plugin.activeMigration;
-        const prUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
+        const rawUrl = migration?.pullRequestUrl || plugin.pluginRepository || '';
+        const hasValidUrl = isValidExternalUrl(rawUrl);
+        const prUrl = hasValidUrl ? rawUrl : '';
         return [
           sanitizeCsvCell(plugin.pluginName),
           sanitizeCsvCell((migration?.migrationStatus || 'UNKNOWN').toUpperCase()),

@@ -29,7 +29,7 @@ import {
 } from "./domain/baselineParser";
 import { calculateHealthScore, getPluginInsight, SCORING_PENALTIES } from "./domain/scoring";
 import { filterPlugins } from "./domain/selectors";
-import { isSafeShellArg, escapeHtml } from "./domain/security";
+import { generateMasterScript } from "./application/remediation/generateMasterScript";
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -2218,25 +2218,7 @@ function Dashboard() {
                 <button
                   className="tab-btn mini"
                   onClick={() => {
-                    const masterScript = [
-                      "#!/bin/bash",
-                      `# AUTOMATED MODERNIZATION SCRIPT - GENERATED: ${new Date().toISOString()}`,
-                      "# ----------------------------------------------------------------",
-                      "# ADVISORY: The following commands are automated recommendations based on",
-                      "# static metadata analysis. Maintainers must review commands and test locally",
-                      "# before executing in production environments.",
-                      "# ----------------------------------------------------------------",
-                      ...surgeryQueue.map(name => {
-                        if (!isSafeShellArg(name)) {
-                          return `\n# --- Targeting: SKIPPED (Invalid or unsafe plugin identifier: "${escapeHtml(name)}") ---`;
-                        }
-                        const plugin = allPluginsWithInsights.find(p => p.pluginName === name);
-                        return [
-                          `\n# --- Targeting: ${name} ---`,
-                          ...(plugin?.insight.surgical.commands || [])
-                        ].join('\n');
-                      })
-                    ].join('\n');
+                    const masterScript = generateMasterScript(allPluginsWithInsights, surgeryQueue);
 
                     const blob = new Blob([masterScript], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);

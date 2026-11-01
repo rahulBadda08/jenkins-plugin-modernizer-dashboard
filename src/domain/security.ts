@@ -1,5 +1,5 @@
 /**
- * Security utilities for HTML escaping, CSV sanitization, and shell argument validation.
+ * Security utilities for HTML escaping, CSV sanitization, URL validation, and shell argument safety.
  */
 
 const HTML_ENTITY_MAP: Record<string, string> = {
@@ -21,16 +21,20 @@ export function escapeHtml(value: unknown): string {
 
 /**
  * Sanitizes a cell value for CSV export:
- * - Neutralizes formula injection vulnerabilities (characters =, +, -, @, \t, \r)
- * - Escapes double quotes by doubling them
+ * - Strips Byte Order Mark (\uFEFF) if present at start
+ * - Neutralizes formula injection vulnerabilities (characters =, +, -, @, \t, \r, %, |)
+ *   including when preceded by whitespace
+ * - Escapes double quotes by doubling them as per RFC 4180
  * - Wraps in double quotes
  */
 export function sanitizeCsvCell(value: unknown): string {
   if (value === null || value === undefined) return '""';
-  let str = String(value);
+  let str = String(value).replace(/^\uFEFF/, '');
 
-  // Strip formula injection triggers by prefixing with a single quote
-  if (/^[=+\-@\t\r]/.test(str)) {
+  // Strip formula injection triggers (including when preceded by spaces/newlines)
+  const isTriggered =
+    /^[=+\-@\t\r%|]/.test(str) || /^[=+\-@\t\r%|]/.test(str.replace(/^[ \n]+/, ''));
+  if (isTriggered) {
     str = `'${str}`;
   }
 
@@ -66,6 +70,50 @@ export function sanitizeShellArg(value: string, fallback = 'unknown'): string {
     return trimmed;
   }
   return fallback;
+}
+
+/**
+ * Validates whether an input is a safe external HTTP or HTTPS URL.
+ * Rejects non-HTTP protocols (e.g. javascript:, file:), embedded credentials, and invalid hostnames.
+ */
+export function isValidExternalUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return false;
+    if (url.username || url.password) return false;
+    if (!url.hostname || !url.hostname.includes('.')) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export interface GitHubRepoRef {
+  owner: string;
+  repo: string;
+}
+
+/**
+ * Safely parses a GitHub repository URL into its owner and repository names.
+ * Both owner and repo must strictly conform to SAFE_IDENTIFIER_PATTERN.
+ */
+export function parseGitHubRepo(repoUrl: unknown): GitHubRepoRef | null {
+  if (!isValidExternalUrl(repoUrl)) return null;
+  try {
+    const url = new URL(String(repoUrl).trim());
+    if (url.hostname !== 'github.com' && url.hostname !== 'www.github.com') return null;
+    const parts = url.pathname.replace(/^\/|\/$/g, '').split('/');
+    if (parts.length < 2) return null;
+    const owner = parts[0];
+    const repo = parts[1].replace(/\.git$/i, '');
+    if (isSafeShellArg(owner) && isSafeShellArg(repo)) {
+      return { owner, repo };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**

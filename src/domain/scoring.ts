@@ -1,7 +1,7 @@
 import type { PluginData, PluginInsight, PriorityItem, ChecklistItem } from './types';
 import { selectActiveMigration } from './migrationPolicy';
 import { calculateBaselineDrift, isVersionOutdated } from './baselineParser';
-import { isSafeShellArg } from './security';
+import { isSafeShellArg, parseGitHubRepo } from './security';
 
 export const SCORING_PENALTIES = {
   MIGRATION_FAILURE: 30,
@@ -75,7 +75,7 @@ export function calculateHealthScore(plugin: PluginData): number {
   return Math.max(MIN_HEALTH_SCORE, Math.min(MAX_HEALTH_SCORE, score));
 }
 
-export function getRemediationCommands(checklist: ChecklistItem[], pluginName: string): string[] {
+export function getRemediationCommands(checklist: ChecklistItem[], pluginName: string, repositoryUrl?: string): string[] {
   // If pluginName contains unsafe characters, refuse command generation to prevent executing mutated/unintended targets
   if (!isSafeShellArg(pluginName)) {
     return [
@@ -87,6 +87,8 @@ export function getRemediationCommands(checklist: ChecklistItem[], pluginName: s
 
   const commands: string[] = [];
   const safePluginName = pluginName.trim();
+  const repoTarget = repositoryUrl ? parseGitHubRepo(repositoryUrl) : null;
+  const targetRepo = repoTarget ? `${repoTarget.owner}/${repoTarget.repo}` : `jenkins-plugins/${safePluginName}`;
   // Strictly target confirmed failures (never trigger commands on missing/unknown telemetry)
   const fails = checklist.filter(c => c.status === 'failed');
 
@@ -97,7 +99,7 @@ export function getRemediationCommands(checklist: ChecklistItem[], pluginName: s
     commands.push(`mvn versions:update-parent -DparentVersion=5.12`);
   }
   if (fails.some(f => f.label.includes('CI'))) {
-    commands.push(`gh workflow run modernization.yml --repo jenkins-plugins/${safePluginName}`);
+    commands.push(`gh workflow run modernization.yml --repo ${targetRepo}`);
   }
   if (fails.some(f => f.label.includes('API'))) {
     commands.push(`mvn rewrite:run -DactiveRecipes=org.openrewrite.jenkins.ModernizePlugin`);
@@ -258,7 +260,7 @@ export function getPluginInsight(plugin: PluginData): PluginInsight {
   }
 
   const drift = calculateBaselineDrift(ver);
-  const commands = getRemediationCommands(checklist, plugin.pluginName);
+  const commands = getRemediationCommands(checklist, plugin.pluginName, plugin.pluginRepository);
 
   return {
     actionInsight: {
