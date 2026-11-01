@@ -1,0 +1,13 @@
+node_modules
+dist
+dist-ssr
+.git
+.github
+docs
+scratch
+*.log
+.editorconfig
+.nvmrc
+debug.log
+flowbite-mcp
+README.md
