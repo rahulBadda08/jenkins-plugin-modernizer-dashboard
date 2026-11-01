@@ -1,0 +1,30 @@
+name: Feature Request
+description: Propose a new analytical visualization, filter, or modernization capability
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Suggest an idea or improvement for the dashboard!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of the limitation or need.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Describe the proposed solution
+      description: What should happen or how should it be visualized?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Describe alternatives considered
+      description: Any alternative solutions or workarounds considered.
+    validations:
+      required: false

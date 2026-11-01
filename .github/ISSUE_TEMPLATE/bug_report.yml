@@ -1,0 +1,39 @@
+name: Bug Report
+description: Report a defect, incorrect calculation, or rendering issue
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: input
+    id: plugin-name
+    attributes:
+      label: Affected Plugin (if applicable)
+      description: The name of the Jenkins plugin affected.
+      placeholder: e.g. git, workflow-job
+    validations:
+      required: false
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen instead.
+    validations:
+      required: true
+  - type: input
+    id: browser-os
+    attributes:
+      label: Environment
+      description: Browser, OS, and screen resolution.
+      placeholder: e.g. Chrome 124, macOS 14 / Windows 11
+    validations:
+      required: false

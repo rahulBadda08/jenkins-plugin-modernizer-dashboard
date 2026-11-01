@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Coverage directory
+coverage/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -23,6 +26,7 @@ dist-ssr
 *.sln
 *.sw?
 
-# Local MCP servers & artifacts
+# Local MCP servers, artifacts & scratch
 flowbite-mcp/
+scratch/
 *.bak
