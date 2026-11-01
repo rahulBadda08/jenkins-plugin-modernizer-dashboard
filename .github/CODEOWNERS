@@ -1,0 +1,15 @@
+# Global repository owner
+* @rahulBadda08
+
+# Ingestion pipeline and data integrity
+/scripts/ @rahulBadda08
+/src/data/ @rahulBadda08
+
+# Workflows and infrastructure
+/.github/ @rahulBadda08
+/Dockerfile @rahulBadda08
+/docker-compose.yml @rahulBadda08
+/nginx.conf @rahulBadda08
+/Jenkinsfile @rahulBadda08
+/terraform/ @rahulBadda08
+

@@ -49,3 +49,16 @@ jobs:
 
       - name: Compile Production Site
         run: npx vite build
+
+  dependency-review:
+    name: Supply Chain Dependency Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Run Dependency Review Action
+        uses: actions/dependency-review-action@5a2ce3f5b92ee19cbb1541a4984b76d921601d7c # v4.3.4
+        with:
+          fail-on-severity: high

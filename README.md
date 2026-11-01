@@ -72,18 +72,25 @@ This is an **independent community project** inspired by the [Jenkins GSoC 2026 
 
 ---
 
-## 🛡️ DevOps & Security Controls
+## 🛡️ DevOps & Engineering Controls
 
-| Category | Implementation | Description |
+| Area | Status | Implementation & Specifications |
 |---|---|---|
-| **Containerization** | `Dockerfile` + `nginx.conf` | Multi-stage build (`node:24-alpine` builder, unprivileged `nginx:alpine` runner) with security headers and SPA fallback. |
-| **Jenkins CI** | `Jenkinsfile` | Declarative pipeline mirroring all verification stages (`npm audit`, ESLint, `tsc`, Vitest, `verifyData`, build). |
-| **Supply Chain** | `.github/dependabot.yml` | Weekly automated dependency update PRs for npm packages and GitHub Actions. |
-| **SAST Scanning** | `.github/workflows/codeql.yml` | Weekly and PR-triggered CodeQL security scans for JavaScript/TypeScript. |
-| **Pipeline Alerting** | `sync-plugin-data.yml` | Automatically creates a deduplicated GitHub Issue when nightly data ingestion drops below 95% or fails. |
-| **Dataset Integrity** | `scripts/verifyData.mjs` | Verifies SHA-256 checksum embedded in `manifest.json` before allowing builds to complete. |
-| **Command Injection Defense** | `isSafeShellArg()` | Validates plugin identifiers against `/^[a-zA-Z0-9_-]+$/` before generating advisory remediation bash scripts. |
-| **Spreadsheet Sanitization** | `sanitizeCsvCell()` | Prepends single quotes to neutralizing spreadsheet formula triggers (`=`, `+`, `-`, `@`, `\t`, `\r`, `%`, `|`). |
+| **CI Quality Gates** | ✅ **Enforced** | `ci.yml` and `deploy-pages.yml` running ESLint, `tsc -b`, Vitest, `verifyData.mjs`, Vite build, and `budget:check`. |
+| **Scheduled Data Pipeline** | ✅ **Enforced** | Daily midnight UTC sync (`sync-plugin-data.yml`), 95% threshold, atomic rollback, commit handoff, and step summary. |
+| **Containerization** | ✅ **Enforced** | Multi-stage `Dockerfile` (`node:24-alpine` -> `nginx:alpine` unprivileged), `nginx.conf`, `.dockerignore`, `docker-compose.yml`. |
+| **Jenkins Pipeline** | ✅ **Enforced** | Declarative `Jenkinsfile` with parallel lint/typecheck, supply chain audit, unit tests, and dataset verification. |
+| **Dependency Automation** | ✅ **Enforced** | `.github/dependabot.yml` maintaining weekly updates for `npm` packages and GitHub Actions. |
+| **Security Scanning & SAST** | ✅ **Enforced** | GitHub CodeQL (`codeql.yml`), `actions/dependency-review-action` on PRs, and immutable 40-character SHA-pinned actions. |
+| **PR Preview Deployments** | ✅ **Enforced** | `pr-preview.yml` builds PR bundles, checks performance budgets, and publishes preview artifacts with automatic PR commenting. |
+| **E2E & Accessibility Tests** | ✅ **Enforced** | Playwright smoke suite (`e2e/smoke.spec.ts`) with `@axe-core/playwright` automated WCAG 2.1 AA accessibility checks. |
+| **Performance Budgets** | ✅ **Enforced** | `scripts/checkBundleSize.mjs` (`budget:check`) enforcing raw and gzip size limits across all bundles in CI. |
+| **Coverage Reporting** | ✅ **Enforced** | `@vitest/coverage-v8` with strict threshold gates (>75% branch coverage, >80% line coverage). |
+| **Pipeline Failure Alerting** | ✅ **Enforced** | `sync-plugin-data.yml` auto-opens deduplicated GitHub Issues if daily data ingestion fails or drops below 95%. |
+| **Synthetic Uptime Monitoring**| ✅ **Enforced** | `synthetic-monitoring.yml` 6-hour cron probe checking live URL response times, HTTP 200, and DOM integrity. |
+| **Release Management** | ✅ **Enforced** | Semantic versioning (`v1.0.0`), annotated git tags, and automated GitHub Release publishing (`release.yml`). |
+| **Repository Governance** | ✅ **Enforced** | `.github/CODEOWNERS`, `.editorconfig`, `SECURITY.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and issue/PR templates. |
+| **Infrastructure as Code (IaC)**| ✅ **Enforced** | Complete Terraform module in `terraform/` for Amazon S3 + CloudFront OAC + Security Headers deployment. |
 
 ---
 
@@ -144,10 +151,12 @@ Individual commands:
 ```bash
 npm run lint           # ESLint static analysis
 npm run typecheck      # TypeScript compilation check (tsc -b)
-npm test               # Vitest unit test suite (83 tests)
+npm test               # Vitest unit test suite (84 tests)
 npm run test:coverage  # Vitest V8 code coverage report with enforced thresholds (>75% branches, >80% lines)
+npm run test:e2e       # Playwright E2E smoke and axe-core accessibility tests
 npm run data:verify    # Dataset SHA-256 and schema verification
 npm run build          # Production bundle compilation (Vite 8 Rolldown)
+npm run budget:check   # Performance budget verification (raw and gzip thresholds)
 ```
 
 ---
