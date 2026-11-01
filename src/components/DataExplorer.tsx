@@ -18,6 +18,8 @@ interface DataExplorerProps {
   externalSearch?: string;
   externalMigrationFilter?: string;
   externalPrFilter?: string;
+  externalBaselineFilter?: string;
+  onClearBaselineFilter?: () => void;
   roadmapList?: string[];
   legacyAlignmentList?: string[];
   onClearExternal?: () => void;
@@ -28,6 +30,8 @@ export default function DataExplorer({
   onPluginSelect, 
   externalSearch, 
   externalMigrationFilter = "ALL",
+  externalBaselineFilter = "ALL",
+  onClearBaselineFilter,
   roadmapList, 
   legacyAlignmentList
 }: DataExplorerProps) {
@@ -233,6 +237,31 @@ export default function DataExplorer({
             {externalSearch && (
               <span className="system-status-tag" style={{ background: 'var(--accent-amber)', color: 'black', border: 'none' }}>
                 {externalSearch} ACTIVE
+              </span>
+            )}
+            {externalBaselineFilter && externalBaselineFilter !== "ALL" && (
+              <span
+                className="system-status-tag"
+                style={{
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#fbbf24',
+                  border: '1px solid rgba(245, 158, 11, 0.4)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}
+              >
+                <span>BASELINE: {externalBaselineFilter.toUpperCase()}</span>
+                {onClearBaselineFilter && (
+                  <button
+                    type="button"
+                    onClick={onClearBaselineFilter}
+                    style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, fontSize: '11px', lineHeight: 1 }}
+                    aria-label="Clear baseline cohort filter"
+                  >
+                    ✕
+                  </button>
+                )}
               </span>
             )}
           </div>

@@ -1,5 +1,6 @@
 import type { EnrichedPlugin } from './types';
 import {
+  type BaselineBucket,
   getBaselineBucket,
   getBaselineBucketByToken,
   getMigrationBaselineVersion,
@@ -13,6 +14,7 @@ export interface FilterOptions {
   statusFilter?: string;
   prFilter?: string;
   severityFilter?: string;
+  baselineFilter?: BaselineBucket | 'ALL';
   roadmapList?: string[];
   legacyAlignmentNames?: string[];
 }
@@ -28,7 +30,7 @@ export interface WorkbenchMetrics {
 }
 
 export function filterPlugins(plugins: EnrichedPlugin[], options: FilterOptions): EnrichedPlugin[] {
-  const { globalSearch, searchTerm, topicFilter, statusFilter, prFilter, severityFilter, roadmapList, legacyAlignmentNames } = options;
+  const { globalSearch, searchTerm, topicFilter, statusFilter, prFilter, severityFilter, baselineFilter, roadmapList, legacyAlignmentNames } = options;
   const term = (globalSearch || searchTerm || '').trim();
 
   return plugins.filter((plugin) => {
@@ -55,6 +57,12 @@ export function filterPlugins(plugins: EnrichedPlugin[], options: FilterOptions)
         const matchTags = (migration.tags || []).some(t => t.toLowerCase().includes(lowerTerm));
         if (!matchName && !matchRepo && !matchTags) return false;
       }
+    }
+
+    // 1b. Typed Baseline Cohort Match
+    if (baselineFilter && baselineFilter !== 'ALL') {
+      const pluginBucket = getBaselineBucket(migration);
+      if (pluginBucket !== baselineFilter) return false;
     }
 
     // 2. Topic Match
@@ -100,13 +108,20 @@ export function computeWorkbenchMetrics(
     topicFilter?: string;
     prFilter?: string;
     severityFilter?: string;
+    baselineFilter?: BaselineBucket | 'ALL';
   } = {}
 ): WorkbenchMetrics {
-  const { topicFilter = 'ALL', prFilter = 'ALL', severityFilter = 'ALL' } = options;
+  const { topicFilter = 'ALL', prFilter = 'ALL', severityFilter = 'ALL', baselineFilter = 'ALL' } = options;
 
   const baseList = plugins.filter(p => {
     const migration = p.activeMigration;
     if (!migration) return false;
+
+    // 0. Baseline Match
+    if (baselineFilter && baselineFilter !== 'ALL') {
+      const pluginBucket = getBaselineBucket(migration);
+      if (pluginBucket !== baselineFilter) return false;
+    }
 
     // 1. Topic Match
     if (topicFilter && topicFilter !== 'ALL') {

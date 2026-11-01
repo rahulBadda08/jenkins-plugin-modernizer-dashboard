@@ -145,6 +145,23 @@ describe('selectors', () => {
     expect(direct[0].pluginName).toBe('subversion');
   });
 
+  it('filters plugins by typed baseline cohort', () => {
+    const aligned = filterPlugins(samplePlugins, { baselineFilter: 'aligned' });
+    expect(aligned).toHaveLength(1);
+    expect(aligned[0].pluginName).toBe('git');
+
+    const warning = filterPlugins(samplePlugins, { baselineFilter: 'warning' });
+    expect(warning).toHaveLength(1);
+    expect(warning[0].pluginName).toBe('workflow-aggregator');
+
+    const critical = filterPlugins(samplePlugins, { baselineFilter: 'critical' });
+    expect(critical).toHaveLength(1);
+    expect(critical[0].pluginName).toBe('subversion');
+
+    const all = filterPlugins(samplePlugins, { baselineFilter: 'ALL' });
+    expect(all).toHaveLength(3);
+  });
+
   it('computes centralized workbench metrics with ranking and outdated counts', () => {
     const metrics = computeWorkbenchMetrics(samplePlugins, 3);
     expect(metrics.totalCount).toBe(3);

@@ -7,6 +7,7 @@ import SurgeryTray from "./components/SurgeryTray";
 import MethodologyPanel from "./components/MethodologyPanel";
 import WorkbenchPanel from "./components/WorkbenchPanel";
 import allPluginsRaw from "./data/all_plugins.json";
+import manifestData from "./data/manifest.json";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -67,19 +68,29 @@ const DIAGNOSTIC_ACTIONS: Record<string, string> = {
 
 // ── COMMERCIAL TELEMETRY HEADER ──
 const MarqueeHeader: React.FC<{ text: string; count?: number; style?: React.CSSProperties }> = ({ text, count, style }) => {
+  const syncTime = manifestData.generatedAt 
+    ? new Date(manifestData.generatedAt).toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
+    : 'SYNCHRONIZED';
+  const shaShort = manifestData.datasetSha256 ? manifestData.datasetSha256.slice(0, 8) : 'VERIFIED';
+  const treeShort = manifestData.sourceTreeSha ? manifestData.sourceTreeSha.slice(0, 7) : 'HEAD';
+
   return (
     <div
-      className="flex items-center justify-between rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2.5 text-xs font-mono text-slate-300 backdrop-blur-md mb-6"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2.5 text-xs font-mono text-slate-300 backdrop-blur-md mb-6"
       style={style}
     >
       <div className="flex items-center gap-2">
         <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
         <span className="font-semibold tracking-wider text-slate-100">{text}</span>
       </div>
-      <div className="flex items-center gap-3 text-slate-400 text-[11px]">
-        <span>TELEMETRY STREAM: SYNCHRONIZED</span>
+      <div className="flex flex-wrap items-center gap-3 text-slate-400 text-[11px]">
+        <span>SYNCED: <strong className="text-slate-200">{syncTime}</strong></span>
         <span className="text-slate-700">|</span>
-        <span>{count !== undefined ? `${count} PLUGINS INDEXED` : 'ECOSYSTEM SYNCHRONIZED'}</span>
+        <span>UPSTREAM: <code className="text-sky-300">{treeShort}</code></span>
+        <span className="text-slate-700">|</span>
+        <span>SHA-256: <code className="text-emerald-300">{shaShort}…</code></span>
+        <span className="text-slate-700">|</span>
+        <span className="text-emerald-400 font-semibold">{count !== undefined ? `${count} PLUGINS INDEXED` : '100% INGESTION'}</span>
       </div>
     </div>
   );
@@ -311,11 +322,13 @@ function Dashboard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const [baselineFilter, setBaselineFilter] = useState<BaselineBucket | 'ALL'>('ALL');
+
   const activateBaselineBucket = (bucketLabel: string) => {
     const bucketEntry = (Object.entries(BASELINE_BUCKET_META) as Array<[BaselineBucket, typeof BASELINE_BUCKET_META[BaselineBucket]]>)
       .find(([, meta]) => meta.label === bucketLabel);
     if (!bucketEntry) return;
-    setGlobalSearch(bucketEntry[1].token);
+    setBaselineFilter(bucketEntry[0]);
     setCurrentlyActiveTab("Data Explorer");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -415,8 +428,9 @@ function Dashboard() {
       topicFilter,
       prFilter,
       severityFilter,
+      baselineFilter,
     });
-  }, [allPluginsWithInsights, topicFilter, prFilter, severityFilter, allPluginsData.length]);
+  }, [allPluginsWithInsights, topicFilter, prFilter, severityFilter, baselineFilter, allPluginsData.length]);
 
   // ── THE FILTER PIVOT ENGINE (Domain-Driven Selector Integration) ──
   const filteredEcosystem = useMemo(() => {
@@ -425,10 +439,11 @@ function Dashboard() {
       topicFilter,
       prFilter,
       severityFilter,
+      baselineFilter,
       roadmapList: workbenchMetrics?.roadmapList,
       legacyAlignmentNames: workbenchMetrics?.legacyAlignmentNames,
     });
-  }, [allPluginsWithInsights, globalSearch, topicFilter, prFilter, severityFilter, workbenchMetrics]);
+  }, [allPluginsWithInsights, globalSearch, topicFilter, prFilter, severityFilter, baselineFilter, workbenchMetrics]);
 
   const activateRoadmap = () => {
     isStrategicNavRef.current = true;
@@ -1464,6 +1479,8 @@ function Dashboard() {
               externalSearch={globalSearch}
               externalMigrationFilter={severityFilter}
               externalPrFilter={prFilter}
+              externalBaselineFilter={baselineFilter}
+              onClearBaselineFilter={() => setBaselineFilter('ALL')}
               roadmapList={workbenchMetrics.roadmapList}
               legacyAlignmentList={workbenchMetrics.legacyAlignmentNames}
               onClearExternal={() => setGlobalSearch("")}

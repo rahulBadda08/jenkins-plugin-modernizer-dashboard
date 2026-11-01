@@ -1,0 +1,83 @@
+name: Synthetic Uptime & Health Check
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Every 6 hours
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "synthetic-monitoring"
+  cancel-in-progress: true
+
+jobs:
+  uptime-check:
+    name: Probe Production Endpoint
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+
+    steps:
+      - name: Probe Live Deployment Endpoint
+        id: probe
+        run: |
+          TARGET_URL="https://rahulbadda08.github.io/jenkins-plugin-modernizer-dashboard/"
+          echo "Probing endpoint: $TARGET_URL"
+          
+          RESPONSE_METRICS=$(curl -sSL -w "HTTP_CODE:%{http_code}|TIME:%{time_total}s" -o page_output.html "$TARGET_URL")
+          HTTP_CODE=$(echo "$RESPONSE_METRICS" | grep -o 'HTTP_CODE:[0-9]*' | cut -d: -f2)
+          TIME_TOTAL=$(echo "$RESPONSE_METRICS" | grep -o 'TIME:[0-9.]*s' | cut -d: -f2)
+          
+          echo "HTTP Code: $HTTP_CODE"
+          echo "Response Time: $TIME_TOTAL"
+          
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Error: Unexpected HTTP status $HTTP_CODE from $TARGET_URL"
+            exit 1
+          fi
+          
+          # Verify HTML payload integrity
+          if ! grep -q 'id="root"' page_output.html; then
+            echo "Error: Live payload does not contain React root element (<div id=\"root\">)"
+            exit 1
+          fi
+          
+          echo "Uptime probe passed successfully in $TIME_TOTAL."
+          echo "time_total=$TIME_TOTAL" >> "$GITHUB_OUTPUT"
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+
+      - name: Alert on Synthetic Probe Failure
+        if: failure()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const title = `🚨 [Synthetic Uptime Alert] Live Dashboard Probe Failed (${new Date().toISOString().slice(0, 10)})`;
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = `### Synthetic Monitoring Alert: Deployment Down or Degraded\n\nThe automated 6-hour synthetic probe detected that the live GitHub Pages dashboard is unreachable or returned invalid HTML.\n\n- **Target**: [https://rahulbadda08.github.io/jenkins-plugin-modernizer-dashboard/](https://rahulbadda08.github.io/jenkins-plugin-modernizer-dashboard/)\n- **Workflow Run**: [View Probe Logs](${runUrl})\n- **Timestamp**: \`${new Date().toUTCString()}\`\n\n#### Diagnostic Actions\n1. Check GitHub Pages environment status on the repository.\n2. Verify that the latest \`deploy-pages.yml\` run succeeded.\n3. Check browser console logs for fatal JavaScript execution errors.`;
+
+            try {
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                labels: ['uptime-alert']
+              });
+
+              if (issues.data.length === 0) {
+                await github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: title,
+                  body: body,
+                  labels: ['uptime-alert', 'incident', 'automated']
+                });
+                console.log('Opened automated uptime alert issue.');
+              } else {
+                console.log('An open uptime alert issue already exists. Skipping duplicate creation.');
+              }
+            } catch (err) {
+              console.error('Failed to dispatch alert issue: ' + err.message);
+            }
