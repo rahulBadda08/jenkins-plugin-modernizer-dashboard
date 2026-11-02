@@ -83,5 +83,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Log Preview Cleanup
-        run: echo "PR #${{ github.event.number }} closed. Artifacts will expire via retention policy."
+        run: |
+          echo "PR ${{ github.event.pull_request.number || github.event.number }} closed. Artifacts will expire via retention policy."
 
