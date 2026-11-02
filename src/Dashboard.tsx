@@ -394,7 +394,7 @@ function Dashboard() {
   const hudRef = useIntersectionReveal();
 
   // Flag to prevent filter reset during strategic navigation
-  const isStrategicNavRef = useRef(false);
+  const [isStrategicNav, setIsStrategicNav] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -447,19 +447,15 @@ function Dashboard() {
   }, [allPluginsWithInsights, globalSearch, topicFilter, prFilter, severityFilter, baselineFilter, workbenchMetrics]);
 
   const activateRoadmap = () => {
-    isStrategicNavRef.current = true;
+    setIsStrategicNav(true);
     setActiveQueueFilter('ROADMAP');
     setCurrentlyActiveTab("Strategic Workbench");
-    // Reset the flag after the transition cycle
-    setTimeout(() => { isStrategicNavRef.current = false; }, 100);
   };
 
   const activateLegacyView = () => {
-    isStrategicNavRef.current = true;
+    setIsStrategicNav(true);
     setActiveQueueFilter('LEGACY_ALIGNMENT');
     setCurrentlyActiveTab("Strategic Workbench");
-    // Reset the flag after the transition cycle
-    setTimeout(() => { isStrategicNavRef.current = false; }, 100);
   };
 
   // ── ROUTING & HISTORY SYNCHRONIZATION ──
@@ -520,7 +516,7 @@ function Dashboard() {
   const [prevActiveTab, setPrevActiveTab] = useState(currentlyActiveTab);
   if (prevActiveTab !== currentlyActiveTab) {
     setPrevActiveTab(currentlyActiveTab);
-    if (!isStrategicNavRef.current && currentlyActiveTab !== "Data Explorer") {
+    if (!isStrategicNav && currentlyActiveTab !== "Data Explorer") {
       const isPluginView = !["Global Overview", "Topic Dashboards", "Data Explorer", "Strategic Workbench", "Methodology"].includes(currentlyActiveTab);
       if (!isPluginView) {
         setGlobalSearch("");
@@ -534,6 +530,9 @@ function Dashboard() {
         setIsTopicOpen(false);
         setIsPROpen(false);
       }
+    }
+    if (isStrategicNav) {
+      setIsStrategicNav(false);
     }
   }
 
