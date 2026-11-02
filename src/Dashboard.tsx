@@ -1,14 +1,13 @@
 import "./Dashboard.css";
-import BarChart from "./components/BarChart";
-import PieChart from "./components/PieChart";
 import DataExplorer from "./components/DataExplorer";
 import DashboardTabs from "./components/DashboardTabs";
 import SurgeryTray from "./components/SurgeryTray";
 import MethodologyPanel from "./components/MethodologyPanel";
 import WorkbenchPanel from "./components/WorkbenchPanel";
+import OverviewPanel from "./components/OverviewPanel";
+import { PluginDetailPanel } from "./components/PluginDetailPanel";
 import allPluginsRaw from "./data/all_plugins.json";
-import manifestData from "./data/manifest.json";
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 
 // --- ASSETS ---
@@ -28,7 +27,6 @@ import {
 } from "./domain/baselineParser";
 import { calculateHealthScore, getPluginInsight } from "./domain/scoring";
 import { filterPlugins, computeWorkbenchMetrics } from "./domain/selectors";
-import { sanitizeExternalUrl } from "./domain/security";
 
 const formatLabel = (str: string) => {
   if (!str) return str;
@@ -67,35 +65,6 @@ const DIAGNOSTIC_ACTIONS: Record<string, string> = {
   "Baseline": "Upgrade Jenkins core baseline to >= 2.440.3 for modern API support."
 };
 
-// ── COMMERCIAL TELEMETRY HEADER ──
-const MarqueeHeader: React.FC<{ text: string; count?: number; style?: React.CSSProperties }> = ({ text, count, style }) => {
-  const syncTime = manifestData.generatedAt 
-    ? new Date(manifestData.generatedAt).toISOString().replace('T', ' ').slice(0, 16) + ' UTC'
-    : 'SYNCHRONIZED';
-  const shaShort = manifestData.datasetSha256 ? manifestData.datasetSha256.slice(0, 8) : 'VERIFIED';
-  const treeShort = manifestData.sourceTreeSha ? manifestData.sourceTreeSha.slice(0, 7) : 'HEAD';
-
-  return (
-    <div
-      className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-2.5 text-xs font-mono text-slate-300 backdrop-blur-md mb-6"
-      style={style}
-    >
-      <div className="flex items-center gap-2">
-        <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="font-semibold tracking-wider text-slate-100">{text}</span>
-      </div>
-      <div className="flex flex-wrap items-center gap-3 text-slate-400 text-[11px]">
-        <span>SYNCED: <strong className="text-slate-200">{syncTime}</strong></span>
-        <span className="text-slate-700">|</span>
-        <span>UPSTREAM: <code className="text-sky-300">{treeShort}</code></span>
-        <span className="text-slate-700">|</span>
-        <span>SHA-256: <code className="text-emerald-300">{shaShort}…</code></span>
-        <span className="text-slate-700">|</span>
-        <span className="text-emerald-400 font-semibold">{count !== undefined ? `${count} PLUGINS INDEXED` : '100% INGESTION'}</span>
-      </div>
-    </div>
-  );
-};
 
 interface VendorDocument extends Document {
   webkitFullscreenElement?: Element | null;
@@ -1135,326 +1104,35 @@ function Dashboard() {
   const isPrimaryTab = ["Global Overview", "Data Explorer", "Strategic Workbench", "Methodology"].includes(currentlyActiveTab);
 
   const renderOverviewPanel = () => (
-    <div
-          id="panel-overview"
-          role="tabpanel"
-          aria-labelledby="tab-overview"
-          tabIndex={0}
-          className="tab-content"
-          key="global"
-          hidden={currentlyActiveTab !== "Global Overview"}
-          style={{ display: currentlyActiveTab === "Global Overview" ? 'flex' : 'none', flexDirection: 'column', gap: '32px' }}
-        >
-
-          
-
-          <MarqueeHeader text="ECOSYSTEM HEALTH REPORT" />
-          <div className="executive-hero-grid" style={{ perspective: '1200px' }}>
-            <div ref={heroCard1Ref} className="glass-card hero-card info kinetic-card liquid-glass tier-1 in-view">
-              <div className="kinetic-text">
-                <span className="hero-label truncate-text">Indexed Plugins</span>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span className="hero-value mono">{workbenchMetrics.filteredCount}</span>
-                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[TOTAL]</span>
-                </div>
-                <p className="hero-desc">Total plugins currently tracked in the modernization registry.</p>
-              </div>
-            </div>
-
-            <div
-              ref={heroCard2Ref}
-              role="button"
-              tabIndex={0}
-              aria-label="Inspect Legacy Core Alignment Gap"
-              className="glass-card hero-card risk-glow kinetic-card liquid-glass tier-2 in-view"
-              onClick={activateLegacyView}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  activateLegacyView();
-                }
-              }}
-              style={{ cursor: 'pointer' }}
-            >
-              <div className="kinetic-text">
-                <span className="hero-label truncate-text">Modern Alignment Gap</span>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span className="hero-value mono">{workbenchMetrics.legacyAlignmentPercentage}%</span>
-                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[LEGACY_CORE]</span>
-                </div>
-                <p className="hero-desc">Percentage of plugins requiring baseline upgrades ( &gt; 2.440).</p>
-              </div>
-            </div>
-
-            <div ref={heroCard3Ref} className="glass-card hero-card success-glow kinetic-card liquid-glass tier-3 in-view">
-              <div className="kinetic-text">
-                <span className="hero-label">Modernization Success</span>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <span className="hero-value mono">{workbenchMetrics.modernizedPercentage}%</span>
-                  <span className="mono" style={{ fontSize: '10px', opacity: 0.4 }}>[ALIGNED]</span>
-                </div>
-                <p className="hero-desc">Percentage of the ecosystem meeting modern development standards.</p>
-              </div>
-            </div>
-          </div>
-
-
-        
-          <div ref={chartRef} className="charts-grid reveal-node animate-delay-4">
-            <div className="glass-card chart-card">
-              <PieChart
-                data={topPieData}
-                title="Sector Distribution"
-                theme={theme}
-              />
-            </div>
-            <div className="glass-card chart-card">
-              <BarChart
-                labels={integrityLabels}
-                data={integrityData}
-                insights={integrityInsights}
-                colors={new Array(integrityData.length).fill('#10B981')}
-                title="Global Integrity Index"
-                theme={theme}
-                yMax={1}
-              />
-            </div>
-          </div>
-
-          <div className="charts-grid reveal-node animate-delay-5" style={{ marginTop: '30px' }}>
-            <div className="glass-card chart-card chart-full">
-              <BarChart
-                labels={overviewLabels}
-                data={overviewData}
-                colors={new Array(overviewData.length).fill('#F59E0B')}
-                title="Modernization Intensity"
-                theme={theme}
-                rotateLabel={45}
-                onItemClick={handleDrillDown}
-              />
-            </div>
-          </div>
-
-        
-          <div className="charts-grid reveal-node animate-delay-5" style={{ marginTop: '30px' }}>
-            <div className="glass-card chart-card">
-              <PieChart
-                data={baselineHealthSummary.pieData}
-                title="Baseline Drift Radar"
-                theme={theme}
-                onItemClick={activateBaselineBucket}
-              />
-            </div>
-            <div className="glass-card chart-card">
-              <BarChart
-                labels={baselineHealthSummary.driftLabels}
-                data={baselineHealthSummary.driftData}
-                insights={baselineHealthSummary.driftInsights}
-                colors={new Array(baselineHealthSummary.driftData.length).fill('#ef4444')}
-                title="Highest Baseline Drift Targets"
-                theme={theme}
-                rotateLabel={35}
-                tooltipMode="drift"
-                onItemClick={handleDrillDown}
-              />
-            </div>
-          </div>
-
-          <div className="strategic-hub reveal-node" style={{ '--delay': '500ms' } as React.CSSProperties}>
-            <div className="hub-briefing">
-              <div className="system-status-badge">
-                <span className="pulse-dot warning"></span> Project Roadmap Active
-              </div>
-              <h2 className="hub-title">Command Center <span className="mono text-accent">Briefing</span></h2>
-              <p className="hub-subtitle">Tactical diagnostics identified for human intervention.</p>
-            </div>
-
-            <div className="hub-grid">
-              <div
-                ref={hubCard1Ref}
-                role="button"
-                tabIndex={0}
-                aria-label="Inspect Legacy Plugins"
-                className="glass-card hub-card risk clickable kinetic-card liquid-glass animate-delay-1"
-                onClick={activateLegacyView}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    activateLegacyView();
-                  }
-                }}
-              >
-                <div className="kinetic-text">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <span className="hub-card-label">Legacy Core Alignment</span>
-                    <span className="hub-card-val mono">{workbenchMetrics.legacyAlignmentPercentage}%</span>
-                  </div>
-                  <p className="hub-card-desc">Entities requiring modernization to meet Core standards.</p>
-                  <div className="hub-card-action">Inspect Legacy Plugins →</div>
-                </div>
-              </div>
-
-              <div ref={hubCard2Ref} className="glass-card hub-card risk kinetic-card liquid-glass animate-delay-2">
-                <div className="kinetic-text">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <span className="hub-card-label">Primary Risk Vector</span>
-                    <span className="hub-card-val mono" style={{ fontSize: '14px' }}>{formatLabel(workbenchMetrics.mainRiskArea)}</span>
-                  </div>
-                  <p className="hub-card-desc">Most frequent failure point.</p>
-                  <div className="hub-card-action secondary">Diagnostic Locked</div>
-                </div>
-              </div>
-
-              <div
-                ref={hubCard3Ref}
-                role="button"
-                tabIndex={0}
-                aria-label="Activate Priority Roadmap Work Queue"
-                className="glass-card hub-card roadmap clickable kinetic-card liquid-glass animate-delay-3"
-                onClick={activateRoadmap}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    activateRoadmap();
-                  }
-                }}
-              >
-                <div className="kinetic-text">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <span className="hub-card-label">Priority Roadmap</span>
-                    <span className="hub-card-val mono">Top 20</span>
-                  </div>
-                  <p className="hub-card-desc">Strategic targets identified by code intensity.</p>
-                  <div className="hub-card-action active">Activate Work Queue →</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-
-
-          
-          <div ref={hudRef} className="mutation-hud animate-delay-5 in-view">
-
-            {/* 1. CODE CHURN & IMPACT */}
-            <div className="glass-card hud-module liquid-glass">
-              <div className="kinetic-text">
-                <div className="hud-label">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M22 12h-4l-3 9L9 3l-3 9H2" /></svg>
-                  Modernization Impact
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                  <div className="hud-value-large">{((grandTotalAdditions + grandTotalDeletions) / 1000).toFixed(1)}K</div>
-                  <div style={{ paddingBottom: '16px', fontSize: '12px', color: 'var(--accent-secondary)' }}>MUTATIONS</div>
-                </div>
-                <p className="hero-desc" style={{ fontSize: '12px', marginBottom: '20px' }}>Aggregate code churn across the modernized registry.</p>
-              </div>
-
-              <div className="impact-meter-container liquid">
-                <div
-                  className="impact-bar-pos liquid"
-                  style={{ width: `${(grandTotalAdditions / (grandTotalAdditions + grandTotalDeletions || 1)) * 100}%` }}
-                ></div>
-                <div
-                  className="impact-bar-neg liquid"
-                  style={{ width: `${(grandTotalDeletions / (grandTotalAdditions + grandTotalDeletions || 1)) * 100}%` }}
-                ></div>
-              </div>
-            </div>
-
-            {/* 2. SANITIZATION HEALTH INDEX */}
-            <div className="hud-module liquid-glass" style={{ alignItems: 'center', justifyContent: 'center', padding: '30px' }}>
-              <div className="kinetic-text" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%' }}>
-                <div className="hud-label" style={{ marginBottom: '20px', alignSelf: 'flex-start' }}>
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                  Health Index
-                </div>
-
-                <div style={{ position: 'relative', width: '100px', height: '100px' }}>
-                  <svg className="radial-progress-svg" viewBox="0 0 100 100">
-                    <defs>
-                      <linearGradient id="healthGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#38bdf8" />
-                        <stop offset="50%" stopColor="#818cf8" />
-                        <stop offset="100%" stopColor="#c084fc" />
-                      </linearGradient>
-                    </defs>
-                    <circle className="radial-bg" cx="50" cy="50" r="45"></circle>
-                    <circle
-                      className="radial-active"
-                      cx="50" cy="50" r="45"
-                      stroke="url(#healthGradient)"
-                      style={{
-                        strokeDasharray: '282.7',
-                        strokeDashoffset: (282.7 - (282.7 * (grandTotalFilesChanged / (workbenchMetrics.totalCount * 5 || 1)))) // Estimating 5 files per plugin avg for goal
-                      }}
-                    ></circle>
-                  </svg>
-                  <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
-                    <div className="mono" style={{ fontSize: '20px', fontWeight: 800 }}>{Math.min(100, Math.round((grandTotalFilesChanged / (workbenchMetrics.totalCount * 5 || 1)) * 100))}%</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 3. REGISTRY COVERAGE */}
-            <div className="glass-card hud-module liquid-glass">
-              <div className="kinetic-text">
-                <div className="hud-label">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>
-                  Registry Span
-                </div>
-                <div className="hud-value-large">{grandTotalFilesChanged.toLocaleString()}</div>
-                <div className="mono" style={{ fontSize: '10px', opacity: 0.4, marginBottom: 'auto' }}>FILES_CLEANED</div>
-              </div>
-            </div>
-
-          </div>
-
-          
-          <div className="reveal-node animate-delay-5" style={{ marginTop: '32px' }}>
-            <div className="hub-briefing" style={{ marginBottom: '24px' }}>
-              <div className="system-status-badge">
-                <span className="pulse-dot danger"></span> Strategic Prioritization
-              </div>
-              <h2 className="hub-title" style={{ fontSize: '24px' }}>High Impact <span className="mono text-accent">Targets</span></h2>
-              <p className="hub-subtitle">Top 5 entities identified with the highest Modernization Impact Index.</p>
-            </div>
-            
-            <div className="task-grid">
-              {highImpactTargets.map((target, idx) => (
-                <div 
-                  key={target.pluginName} 
-                  className="glass-card tactical-task-card kinetic-card in-view" 
-                  onClick={() => handleDrillDown(target.pluginName)} 
-                  style={{ '--delay': `${idx * 100}ms` } as React.CSSProperties}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '28px' }}>
-                    <div className="mono" style={{ opacity: 0.15, fontSize: '28px', fontWeight: 900 }}>{idx + 1}</div>
-                    <div>
-                      <span className="task-plugin-name">{target.pluginName}</span>
-                      <div className="task-telemetry">
-                        <div className="telemetry-item">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="3"><path d="M12 2v20M2 12h20" /></svg>
-                          <span className="hero-desc mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', fontWeight: 700, letterSpacing: '0.5px' }}>{target.impactScore.toFixed(0)} IMPACT INDEX</span>
-                        </div>
-                        <div style={{ width: '1px', height: '12px', background: 'rgba(255,255,255,0.08)' }}></div>
-                        <div className="telemetry-item">
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="3"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                          <span className="hero-desc mono" style={{ fontSize: '10px', opacity: 0.5 }}>{target.insight.surgical.drift.gap} DRIFT</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className={`task-badge ${target.impactScore > 100 ? 'danger' : target.impactScore > 40 ? 'warning' : 'success'}`}>
-                    {target.impactScore > 100 ? 'HIGH_PRIORITY' : target.impactScore > 40 ? 'MODERATE_PRIORITY' : 'ALIGNED_TARGET'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
+    <OverviewPanel
+      currentlyActiveTab={currentlyActiveTab}
+      workbenchMetrics={workbenchMetrics}
+      heroCard1Ref={heroCard1Ref}
+      heroCard2Ref={heroCard2Ref}
+      heroCard3Ref={heroCard3Ref}
+      chartRef={chartRef}
+      hubCard1Ref={hubCard1Ref}
+      hubCard2Ref={hubCard2Ref}
+      hubCard3Ref={hubCard3Ref}
+      hudRef={hudRef}
+      topPieData={topPieData}
+      integrityLabels={integrityLabels}
+      integrityData={integrityData}
+      integrityInsights={integrityInsights}
+      overviewLabels={overviewLabels}
+      overviewData={overviewData}
+      baselineHealthSummary={baselineHealthSummary}
+      grandTotalAdditions={grandTotalAdditions}
+      grandTotalDeletions={grandTotalDeletions}
+      grandTotalFilesChanged={grandTotalFilesChanged}
+      highImpactTargets={highImpactTargets}
+      activateLegacyView={activateLegacyView}
+      activateRoadmap={activateRoadmap}
+      activateBaselineBucket={activateBaselineBucket}
+      handleDrillDown={handleDrillDown}
+      formatLabel={formatLabel}
+      theme={theme}
+    />
   );
 
   const renderExplorerPanel = () => (
@@ -1504,365 +1182,17 @@ function Dashboard() {
     <MethodologyPanel isVisible={currentlyActiveTab === "Methodology"} />
   );
 
-    const renderPluginDetailPanel = () => {
-    if (currentlySelectedPlugin && detailMetrics) {
-      const migrationData = currentlySelectedPlugin.activeMigration;
-      return (
-        <div className="tab-content" key={currentlyActiveTab}>
-          <div className="reveal-node" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "40px" }}>
-            <button
-              onClick={() => setCurrentlyActiveTab("Data Explorer")}
-              className="tab-btn"
-            >
-              ← Explorer Console
-            </button>
-
-            <div style={{ textAlign: 'center' }}>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '12px', letterSpacing: '2px', marginBottom: '4px' }}>PLUG-IN DIAGNOSTICS</p>
-              <h2 className="title">
-                <span className="plugin-name truncate-text" style={{ maxWidth: '100%', margin: '0 auto' }}>{currentlySelectedPlugin.pluginName}</span>
-              </h2>
-            </div>
-
-            <div className="a-button-group" style={{ display: 'flex', gap: '10px' }}>
-              <button
-                onClick={() => toggleQueueItem(currentlySelectedPlugin.pluginName)}
-                className={`tab-btn ${surgeryQueue.includes(currentlySelectedPlugin.pluginName) ? 'active' : ''}`}
-                style={{ fontSize: '11px' }}
-              >
-                {surgeryQueue.includes(currentlySelectedPlugin.pluginName) ? '✓ IN SURGERY QUEUE' : '+ ADD TO QUEUE'}
-              </button>
-            </div>
-          </div>
-
-          {/* ── V43: STRATEGIC ACTION PANEL (NARRATIVE COMMAND CENTER) ── */}
-          <div className={`action-panel ${detailMetrics.actionInsight.severity} reveal-node`}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <div className="action-status-badge">
-                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'currentColor', boxShadow: '0 0 12px currentColor' }}></div>
-                  {detailMetrics.actionInsight.status}
-                </div>
-                <h3 className="action-header">Strategic Assessment</h3>
-              </div>
-
-              {/* V43: Risk Indicator Meter */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
-                <div className={`drift-badge ${detailMetrics.surgical.drift.criticality}`}>
-                  {detailMetrics.surgical.drift.gap} VERSION_DRIFT
-                </div>
-                {detailMetrics.actionInsight.severity === 'danger' && (
-                  <div className="telemetry-module danger" style={{ padding: '8px 16px', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '12px' }}>
-                    <span className="mono" style={{ fontSize: '10px', color: '#EF4444', fontWeight: 800 }}>CRITICAL_BLOCKER_DETECTED</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* V44: Strategic Priority HUD */}
-            <div className="priority-hud">
-              {Object.entries(detailMetrics.priorities).map(([key, p]) => (
-                <div key={key} className="priority-badge">
-                  <div
-                    className="priority-indicator"
-                    style={{
-                      background: p.color,
-                      boxShadow: `0 0 10px ${p.color}, 0 0 5px ${p.color}`
-                    }}
-                  ></div>
-                  <span className="priority-label">{p.label}:</span>
-                  <span className="priority-status" style={{ color: p.color }}>{p.status}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* V47: BRUTAL TRUTH ISSUE BREAKDOWN HUD */}
-            <div className="issue-breakdown-hud">
-              <div className={`issue-card ${detailMetrics.issueBreakdown.deprecated.value ? 'danger' : 'success'}`}>
-                <div className="issue-label">{detailMetrics.issueBreakdown.deprecated.label}</div>
-                <div className="issue-value">
-                  {detailMetrics.issueBreakdown.deprecated.value ? (
-                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> YES</>
-                  ) : (
-                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg> NO</>
-                  )}
-                </div>
-              </div>
-              <div className={`issue-card ${detailMetrics.issueBreakdown.ci.value ? 'success' : 'danger'}`}>
-                <div className="issue-label">{detailMetrics.issueBreakdown.ci.label}</div>
-                <div className="issue-value">
-                  {!detailMetrics.issueBreakdown.ci.value ? (
-                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> MISSING</>
-                  ) : (
-                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg> CONFIGURED</>
-                  )}
-                </div>
-              </div>
-              <div className={`issue-card ${detailMetrics.issueBreakdown.pr.value ? 'success' : 'danger'}`}>
-                <div className="issue-label">{detailMetrics.issueBreakdown.pr.label}</div>
-                <div className="issue-value">
-                  {!detailMetrics.issueBreakdown.pr.value ? (
-                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg> NONE</>
-                  ) : (
-                    <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg> ACTIVE</>
-                  )}
-                </div>
-              </div>
-              <div className={`issue-card ${detailMetrics.ranking.severity}`}>
-                <div className="issue-label">Ecosystem Rank</div>
-                <div className="issue-value" style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>
-                  {detailMetrics.ranking.label}
-                </div>
-              </div>
-            </div>
-
-            {/* V46: Modernization Checklist HUD */}
-            <div className="modernization-checklist">
-              <div className="checklist-header">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-secondary)" strokeWidth="3"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-                MODERNIZATION_CHECKLIST - ECOSYSTEM_ALIGNMENT
-              </div>
-              <div className="checklist-grid">
-                {detailMetrics.checklist.map((item, idx) => (
-                  <div key={idx} className={`checklist-item ${item.value ? 'success' : 'failure'}`}>
-                    <div className="item-main">
-                      <div className="status-marker">
-                        {item.value ? (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><polyline points="20 6 9 17 4 12" /></svg>
-                        ) : (
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                        )}
-                      </div>
-                      <div className="item-info">
-                        <span className="item-label">{item.label}</span>
-                        <span className="item-desc">{item.description}</span>
-                      </div>
-                    </div>
-                    <div className="item-state">{item.value ? 'ALIGNED' : 'MISSING'}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="surgical-terminal">
-              <div className="terminal-header">
-                <div className="terminal-title">SURGICAL_INTERVENTION_TERMINAL - REMEDIATION_SCRIPTS</div>
-                <div className="complexity-info" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <span className="mono" style={{ fontSize: '9px', opacity: 0.5 }}>COMPLEXITY: {detailMetrics.surgical.difficulty}/10</span>
-                  <div className="complexity-meter" style={{ width: '80px', marginTop: 0 }}>
-                    <div
-                      className={`complexity-bar ${detailMetrics.surgical.difficulty > 7 ? 'high' : (detailMetrics.surgical.difficulty > 3 ? 'med' : 'low')}`}
-                      style={{ width: `${detailMetrics.surgical.difficulty * 10}%` }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-              <div className="terminal-content">
-                {detailMetrics.surgical.commands.map((cmd, idx) => (
-                  <div key={idx} className={`terminal-line ${cmd.startsWith('#') ? '' : 'cmd'}`}>
-                    {cmd}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* 🥉 V50: CONTRIBUTION DIRECTIVE (GUIDED ACTION) */}
-            <div className="contribution-hub reveal-node animate-delay-2" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '16px' }}>
-                <div>
-                  <h4 className="mono" style={{ color: 'var(--accent-neon)', fontSize: '12px', letterSpacing: '2px', marginBottom: '8px' }}>CONTRIBUTION // DIRECTIVES</h4>
-                  <h3 className="title" style={{ fontSize: '24px' }}>Execute Modernization</h3>
-                </div>
-                <div style={{ color: 'var(--text-secondary)', fontSize: '11px' }} className="mono">GUIDED_REMEDIATION_PATHWAY</div>
-              </div>
-
-              {(() => {
-                const safeRepoUrl = sanitizeExternalUrl(currentlySelectedPlugin.pluginRepository);
-                const safeIssuesUrl = safeRepoUrl ? `${safeRepoUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/issues` : null;
-                const safeCompareUrl = safeRepoUrl ? `${safeRepoUrl.replace(/\.git$/i, '').replace(/\/$/, '')}/compare` : null;
-
-                return (
-                  <div className="action-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '15px' }}>
-                    {safeRepoUrl ? (
-                      <a href={safeRepoUrl} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
-                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_01]</div>
-                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Analyze Codebase</h5>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Inspect source files and technical debt in the primary repository.</p>
-                        <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>Visit GitHub Repository →</div>
-                      </a>
-                    ) : (
-                      <div className="glass-card in-view" style={{ padding: '20px', opacity: 0.6 }}>
-                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_01]</div>
-                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Analyze Codebase</h5>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Repository link unavailable: protocol must be valid HTTPS without credentials.</p>
-                        <div className="mono" style={{ color: 'var(--accent-amber)', fontSize: '10px' }}>[LINK_SUPPRESSED_BY_SECURITY_POLICY]</div>
-                      </div>
-                    )}
-
-                    {safeIssuesUrl ? (
-                      <a href={safeIssuesUrl} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none' }}>
-                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_02]</div>
-                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Survey Issues</h5>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Check for existing modernization blockers or security advisories.</p>
-                        <div className="link-btn" style={{ fontWeight: 800, fontSize: '11px' }}>View Open Issues →</div>
-                      </a>
-                    ) : (
-                      <div className="glass-card in-view" style={{ padding: '20px', opacity: 0.6 }}>
-                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px' }}>[STEP_02]</div>
-                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Survey Issues</h5>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Issues link unavailable.</p>
-                        <div className="mono" style={{ color: 'var(--accent-amber)', fontSize: '10px' }}>[LINK_SUPPRESSED_BY_SECURITY_POLICY]</div>
-                      </div>
-                    )}
-
-                    {safeCompareUrl ? (
-                      <a href={safeCompareUrl} target="_blank" rel="noreferrer" className="glass-card kinetic-card in-view" style={{ padding: '20px', textDecoration: 'none', borderLeft: '3px solid var(--accent-neon)' }}>
-                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-neon)', marginBottom: '8px' }}>[STEP_03]</div>
-                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Initiate Surgery</h5>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Create a modernization pull request based on terminal insights.</p>
-                        <div className="link-btn" style={{ color: 'var(--accent-neon)', fontWeight: 800, fontSize: '11px' }}>Create Modernization PR →</div>
-                      </a>
-                    ) : (
-                      <div className="glass-card in-view" style={{ padding: '20px', opacity: 0.6, borderLeft: '3px solid var(--accent-neon)' }}>
-                        <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-neon)', marginBottom: '8px' }}>[STEP_03]</div>
-                        <h5 style={{ color: 'var(--text-primary)', fontSize: '16px', marginBottom: '8px' }}>Initiate Surgery</h5>
-                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', marginBottom: '12px' }}>Compare link unavailable.</p>
-                        <div className="mono" style={{ color: 'var(--accent-amber)', fontSize: '10px' }}>[LINK_SUPPRESSED_BY_SECURITY_POLICY]</div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
-
-            
-            <div className="action-grid" style={{ marginTop: '20px' }}>
-              <div className="action-column">
-                <h4 style={{ marginBottom: '20px' }}>EXECUTIVE_SUMMARY // THE CONTEXT</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {detailMetrics.actionInsight.summary.map((narrative, i) => (
-                    <div key={i} className="glass-card revelation-card" style={{
-                      padding: '24px',
-                      background: 'rgba(var(--text-primary-rgb), 0.03)',
-                      border: '1px solid var(--card-border)',
-                      borderRadius: '20px',
-                      position: 'relative'
-                    }}>
-                      <div style={{
-                        fontSize: '18px',
-                        fontWeight: 700,
-                        lineHeight: '1.4',
-                        color: 'var(--text-primary)',
-                        marginBottom: '8px'
-                      }}>
-                        {narrative}
-                      </div>
-                      <div className="mono" style={{ fontSize: '10px', opacity: 0.5, letterSpacing: '1px' }}>
-                        TELEMETRY_CODE: {detailMetrics.actionInsight.status.replace(/ /g, '_')}_INSIGHT_0{i + 1}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="action-column">
-                <h4>STRATEGIC_DIRECTIVES // EXECUTION PLAN</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {detailMetrics.surgicalPlan.length > 0 ? detailMetrics.surgicalPlan.map((step, idx) => (
-                    <div key={idx} className="recommendation-card" style={{ padding: '20px', borderLeft: '3px solid var(--accent-secondary)' }}>
-                      <div className="mono" style={{ fontSize: '10px', color: 'var(--accent-secondary)', marginBottom: '8px', fontWeight: 800 }}>DIRECTIVE_0{idx + 1} // {step.task.toUpperCase()}</div>
-                      <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>{step.action}</div>
-                    </div>
-                  )) : (
-                    <div className="glass-card success" style={{ padding: '24px', textAlign: 'center', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.1)' }}>
-                      <div className="mono" style={{ color: 'var(--accent-green)', fontWeight: '900', fontSize: '12px', letterSpacing: '1px' }}>SYSTEM_STATUS: OPTIMIZED</div>
-                      <div style={{ fontSize: '13px', marginTop: '6px', color: 'var(--text-primary)', opacity: 0.7 }}>No immediate strategic intervention required.</div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: '60px' }}>
-
-            
-            <div className="summary-grid" style={{ marginBottom: '40px' }}>
-              <div className="telemetry-module reveal-node animate-delay-1">
-                <div className="telemetry-icon-box">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /></svg>
-                </div>
-                <span className="telemetry-label">Active Recipe</span>
-                <span className="telemetry-value mono">{migrationData.migrationName}</span>
-              </div>
-
-              <div className="telemetry-module reveal-node animate-delay-2">
-                <div className="telemetry-icon-box" style={{ color: migrationData.migrationStatus === 'SUCCESS' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" /></svg>
-                </div>
-                <span className="telemetry-label">Migration Status</span>
-                <span className={`badge badge-${(migrationData.migrationStatus || "unknown").toLowerCase()}`}>
-                  {formatLabel(migrationData.migrationStatus || "unknown")}
-                </span>
-              </div>
-
-              <div className="telemetry-module reveal-node animate-delay-3">
-                <div className="telemetry-icon-box">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 6h3a2 2 0 0 1 2 2v7" /><line x1="6" y1="9" x2="6" y2="21" /></svg>
-                </div>
-                <span className="telemetry-label">Pull Request</span>
-                <span className={`badge badge-${(migrationData.pullRequestStatus || "unknown").toLowerCase()}`}>
-                  {formatLabel(migrationData.pullRequestStatus || "unknown")}
-                </span>
-              </div>
-
-              <div className="telemetry-module reveal-node animate-delay-4">
-                <div className="telemetry-icon-box">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline points="3.27 6.96 12 12.01 20.73 6.96" /><line x1="12" y1="22.08" x2="12" y2="12" /></svg>
-                </div>
-                <span className="telemetry-label">Entity Version</span>
-                <span className="telemetry-value mono">{migrationData.pluginVersion || "N/A"}</span>
-              </div>
-
-              <div className="telemetry-module reveal-node animate-delay-5" style={{ gridColumn: 'span 2' }}>
-                <div className="telemetry-icon-box">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><line x1="7" y1="7" x2="7.01" y2="7" /></svg>
-                </div>
-                <span className="telemetry-label">Modernization Topics</span>
-                <div className="tag-hud mono" style={{ marginTop: '4px' }}>
-                  {(migrationData.tags || []).map((tag) => (
-                    <span key={tag} className="tag-node">{tag}</span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-
-            <div className="glass-card liquid-glass reveal-node" style={{ '--delay': '600ms', padding: '24px' } as React.CSSProperties}>
-              <h3 className="mono" style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '20px', textTransform: 'uppercase' }}>Diagnostic Findings</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-                {detailMetrics.findings.length > 0 ? detailMetrics.findings.map((f, idx) => (
-                  <div key={idx} style={{ padding: '16px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.15)' }}>
-                    <div className="mono" style={{ color: '#EF4444', fontSize: '11px', fontWeight: '800', marginBottom: '4px' }}>FINDING: {f.issue.toUpperCase()}</div>
-                    <div style={{ fontSize: '13px', opacity: 0.8 }}>{f.recommendation}</div>
-                  </div>
-                )) : (
-                  <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', color: '#64748b' }}>
-                    Systems scan complete. Zero critical diagnostic blockers found.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return (
-      <div className="glass-card animate-fade-up" style={{ textAlign: "center", padding: "60px" }}>
-        <h2>No migration statistics are available for '{currentlyActiveTab}' at this time.</h2>
-      </div>
-    );
-  };
+  const renderPluginDetailPanel = () => (
+    <PluginDetailPanel
+      currentlySelectedPlugin={currentlySelectedPlugin}
+      detailMetrics={detailMetrics}
+      currentlyActiveTab={currentlyActiveTab}
+      surgeryQueue={surgeryQueue}
+      toggleQueueItem={toggleQueueItem}
+      setCurrentlyActiveTab={setCurrentlyActiveTab}
+      formatLabel={formatLabel}
+    />
+  );
 
   const renderMainContent = () => (
     <>
