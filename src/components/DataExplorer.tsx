@@ -48,10 +48,16 @@ export default function DataExplorer({
   }, []);
 
   // ── 2. DATA CASCADING & RESET ──
-  // Reset pagination when the filter changes (plugins prop)
-  useEffect(() => {
+  // Track filter changes during render to reset pagination without cascading effects
+  const [prevFilters, setPrevFilters] = useState({ plugins, externalSearch, externalMigrationFilter });
+  if (
+    prevFilters.plugins !== plugins ||
+    prevFilters.externalSearch !== externalSearch ||
+    prevFilters.externalMigrationFilter !== externalMigrationFilter
+  ) {
+    setPrevFilters({ plugins, externalSearch, externalMigrationFilter });
     setCurrentPage(1);
-  }, [plugins, externalSearch, externalMigrationFilter]);
+  }
 
   // The parent (Dashboard.tsx) handles all semantic filtering (Severity, PR, Topic, Search).
   // DataExplorer simply renders the resultant 'plugins' array.
