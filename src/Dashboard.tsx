@@ -516,30 +516,26 @@ function Dashboard() {
   }, [currentlyActiveTab, allPluginsData]);
 
   // ── FILTER RESET ENGINE ──
-  // Reset all global filters when moving between primary analytical tiers
-  useEffect(() => {
-    // If this is a strategic navigation (from Roadmap/Legacy links), DO NOT RESET
-    if (isStrategicNavRef.current) return;
+  // Reset all global filters when moving between primary analytical tiers during render
+  const [prevActiveTab, setPrevActiveTab] = useState(currentlyActiveTab);
+  if (prevActiveTab !== currentlyActiveTab) {
+    setPrevActiveTab(currentlyActiveTab);
+    if (!isStrategicNavRef.current && currentlyActiveTab !== "Data Explorer") {
+      const isPluginView = !["Global Overview", "Topic Dashboards", "Data Explorer", "Strategic Workbench", "Methodology"].includes(currentlyActiveTab);
+      if (!isPluginView) {
+        setGlobalSearch("");
+        setSeverityFilter("ALL");
+        setTopicFilter("ALL");
+        setPrFilter("ALL");
+        setWorkbenchPage(1); // Reset pagination on tab change
 
-    // Data Explorer should maintain the current Command Hub filters for deep analysis
-    if (currentlyActiveTab === "Data Explorer") return;
-
-    // We only reset if we aren't drilling down into a specific plugin
-    const isPluginView = !["Global Overview", "Topic Dashboards", "Data Explorer", "Strategic Workbench", "Methodology"].includes(currentlyActiveTab);
-
-    if (!isPluginView) {
-      setGlobalSearch("");
-      setSeverityFilter("ALL");
-      setTopicFilter("ALL");
-      setPrFilter("ALL");
-      setWorkbenchPage(1); // Reset pagination on tab change
-
-      // Close any open liquid dropdowns
-      setIsSeverityOpen(false);
-      setIsTopicOpen(false);
-      setIsPROpen(false);
+        // Close any open liquid dropdowns
+        setIsSeverityOpen(false);
+        setIsTopicOpen(false);
+        setIsPROpen(false);
+      }
     }
-  }, [currentlyActiveTab]);
+  }
 
   // ── V10: GLOBAL SCROLL NORMALIZATION ──
   useEffect(() => {
