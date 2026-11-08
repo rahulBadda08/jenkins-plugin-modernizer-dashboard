@@ -6,6 +6,7 @@ import MethodologyPanel from "./components/MethodologyPanel";
 import WorkbenchPanel from "./components/WorkbenchPanel";
 import OverviewPanel from "./components/OverviewPanel";
 import { PluginDetailPanel } from "./components/PluginDetailPanel";
+import CustomCursor from "./components/CustomCursor";
 import allPluginsRaw from "./data/all_plugins.json";
 import { useState, useMemo, useEffect, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -1208,6 +1209,7 @@ function Dashboard() {
     <div
       className="container"
     >
+      <CustomCursor />
 
       {/* 🌊 PARALLAX WATERMARK ARTISTRY */}
       <div

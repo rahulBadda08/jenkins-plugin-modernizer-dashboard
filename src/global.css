@@ -226,7 +226,22 @@ button:active,
 }
 
 /* ── NATIVE CURSOR BRIDGE ── */
-/* Custom cursor is managed by Native Script in index.html */
+@media (pointer: fine) {
+  body,
+  *,
+  *::before,
+  *::after {
+    cursor: none !important;
+  }
+
+  a,
+  button,
+  [role="button"],
+  [role="tab"],
+  .clickable {
+    cursor: none !important;
+  }
+}
 
 /* ── PARALLAX TYPOGRAPHY ── */
 .parallax-bg-text {
