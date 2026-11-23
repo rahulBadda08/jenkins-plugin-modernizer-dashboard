@@ -2,7 +2,7 @@
   "sourceRepository": "jenkins-infra/metadata-plugin-modernizer",
   "sourceTreeSha": "6ea60f735a176c59ebd5ad19a0baf19994582ed2",
   "datasetSha256": "293c06d7780cadc6d38d06409b3b84a5326368b9993a42713fd423e959cbc526",
-  "generatedAt": "2026-11-22T05:29:48.014Z",
+  "generatedAt": "2026-11-23T06:08:34.131Z",
   "discoveredCount": 431,
   "successfulCount": 431,
   "failedCount": 0,
